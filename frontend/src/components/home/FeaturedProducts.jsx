@@ -168,77 +168,73 @@ const FeaturedProducts = () => {
           >
             {featuredProducts.map((product) => (
               <SwiperSlide key={product._id}>
-                <div className="group bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                  {/* Product Image - Fixed to show full image */}
-                  <div className="relative aspect-square overflow-hidden bg-gray-100">
-                    <img
-                      src={getImageUrl(product) || "/placeholder.svg"}
-                      alt={product.name}
-                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                      onError={(e) => {
-                        e.target.src = "/placeholder.svg"
-                      }}
-                    />
+                <Link to={`/products/${product._id}`} className="block">
+                  <div className="group bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+                    {/* Product Image - Fixed to show full image */}
+                    <div className="relative aspect-square overflow-hidden bg-gray-100">
+                      <img
+                        src={getImageUrl(product) || "/placeholder.svg"}
+                        alt={product.name}
+                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => {
+                          e.target.src = "/placeholder.svg"
+                        }}
+                      />
 
-                    {/* Availability Badge */}
-                    <div className="absolute top-2 left-2">
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          isAvailable(product) ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {isAvailable(product) ? "Available" : "Not Available"}
-                      </span>
-                    </div>
-
-                    {/* Discount Badge */}
-                    {product.originalPrice && product.originalPrice > product.price && (
-                      <div className="absolute bottom-2 left-2">
-                        <span className="bg-red-500 text-white px-2 py-1 text-xs font-bold rounded">
-                          {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+                      {/* Availability Badge */}
+                      <div className="absolute top-2 left-2">
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            isAvailable(product) ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                          }`}
+                        >
+                          {isAvailable(product) ? "Available" : "Not Available"}
                         </span>
                       </div>
-                    )}
-                  </div>
 
-                  {/* Product Info */}
-                  <div className="p-4">
-                    <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-pink-600 transition-colors line-clamp-2">
-                      {product.name}
-                    </h3>
-
-                    {/* Rating */}
-                    <div className="flex items-center mb-2">
-                      <div className="flex items-center text-sm">
-                        {[...Array(5)].map((_, i) => (
-                          <span
-                            key={i}
-                            className={`${i < Math.floor(product.rating || 0) ? "text-yellow-400" : "text-gray-300"}`}
-                          >
-                            ★
+                      {/* Discount Badge */}
+                      {product.originalPrice && product.originalPrice > product.price && (
+                        <div className="absolute bottom-2 left-2">
+                          <span className="bg-red-500 text-white px-2 py-1 text-xs font-bold rounded">
+                            {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
                           </span>
-                        ))}
-                      </div>
-                      <span className="text-xs text-gray-500 ml-2">({product.numReviews || 0})</span>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Price */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col">
-                        <span className="text-base font-bold text-pink-600">₹{product.price}</span>
-                        {product.originalPrice && product.originalPrice > product.price && (
-                          <span className="text-xs text-gray-500 line-through">₹{product.originalPrice}</span>
-                        )}
+                    {/* Product Info */}
+                    <div className="p-4">
+                      <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-pink-600 transition-colors line-clamp-2">
+                        {product.name}
+                      </h3>
+
+                      {/* Rating */}
+                      <div className="flex items-center mb-2">
+                        <div className="flex items-center text-sm">
+                          {[...Array(5)].map((_, i) => (
+                            <span
+                              key={i}
+                              className={`${i < Math.floor(product.rating || 0) ? "text-yellow-400" : "text-gray-300"}`}
+                            >
+                              ★
+                            </span>
+                          ))}
+                        </div>
+                        <span className="text-xs text-gray-500 ml-2">({product.numReviews || 0})</span>
                       </div>
-                      <Link
-                        to={`/products/${product._id}`}
-                        className="bg-pink-600 text-white py-2 px-3 rounded-lg hover:bg-pink-700 transition-colors text-sm font-medium"
-                      >
-                        View Details
-                      </Link>
+
+                      {/* Price */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-base font-bold text-pink-600">৳{product.price}</span>
+                          {product.originalPrice && product.originalPrice > product.price && (
+                            <span className="text-xs text-gray-500 line-through">৳{product.originalPrice}</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </Link>
               </SwiperSlide>
             ))}
           </Swiper>

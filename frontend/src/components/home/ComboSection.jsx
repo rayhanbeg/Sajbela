@@ -1,14 +1,13 @@
+"use client"
+
 import { Link } from "react-router-dom"
 import { useState, useEffect } from "react"
-import { useDispatch } from "react-redux"
-import { addToCart } from "../../lib/store/cartSlice"
 import { formatPrice } from "../../lib/utils"
 import api from "../../lib/api"
 
 const ComboSection = () => {
   const [combos, setCombos] = useState([])
   const [loading, setLoading] = useState(true)
-  const dispatch = useDispatch()
 
   useEffect(() => {
     fetchCombos()
@@ -23,12 +22,6 @@ const ComboSection = () => {
       console.error("Error fetching combos:", error)
       setLoading(false)
     }
-  }
-
-  const handleAddToCart = (e, product) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dispatch(addToCart(product))
   }
 
   const renderStars = (rating) => {
@@ -133,7 +126,7 @@ const ComboSection = () => {
                     <span className="text-xs text-gray-500">({combo.numReviews || 0})</span>
                   </div>
 
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1">
                       <span className="text-sm md:text-base font-bold text-pink-600">{formatPrice(combo.price)}</span>
                       {combo.originalPrice && (
@@ -141,13 +134,6 @@ const ComboSection = () => {
                       )}
                     </div>
                   </div>
-
-                  <button
-                    onClick={(e) => handleAddToCart(e, combo)}
-                    className="w-full bg-pink-600 text-white py-2 px-3 rounded-lg hover:bg-pink-700 transition-colors duration-300 text-xs md:text-sm font-medium"
-                  >
-                    Add to Cart
-                  </button>
                 </div>
               </div>
             </Link>

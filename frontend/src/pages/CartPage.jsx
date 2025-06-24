@@ -1,3 +1,5 @@
+"use client"
+
 import { useEffect, useState } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { Link } from "react-router-dom"
@@ -130,16 +132,21 @@ const CartPage = () => {
     return item.price || item.product?.price || 0
   }
 
-  // Calculate shipping cost based on user's address district
   const calculateShippingCost = () => {
     const currentTotal = totalAmount || total || 0
     if (currentTotal >= 2000) return 0 // Free shipping for orders above 2000 taka
 
     // If user has address, use their district
     if (userAddress && userAddress.district) {
-      const district = userAddress.district.toLowerCase()
-      const isDhaka = district === "dhaka"
-      return isDhaka ? 60 : 100 // 60 for Dhaka, 100 for outside Dhaka
+      const district = userAddress.district.toLowerCase().trim()
+      console.log("User district:", district) // Debug log
+
+      // Check if district is Dhaka (exact match or contains dhaka)
+      const isDhaka =
+        district === "dhaka" || district === "dhaka district" || district.includes("dhaka") || district === "ঢাকা"
+
+      console.log("Is Dhaka:", isDhaka) // Debug log
+      return isDhaka ? 60 : 100
     }
 
     // Default to outside Dhaka if no address
@@ -148,11 +155,25 @@ const CartPage = () => {
 
   const getShippingLocation = () => {
     if (userAddress && userAddress.district) {
-      const district = userAddress.district.toLowerCase()
-      return district === "dhaka" ? "Inside Dhaka" : "Outside Dhaka"
+      const district = userAddress.district.toLowerCase().trim()
+
+      // Check if district is Dhaka (exact match or contains dhaka)
+      const isDhaka =
+        district === "dhaka" || district === "dhaka district" || district.includes("dhaka") || district === "ঢাকা"
+
+      return isDhaka ? "Inside Dhaka" : "Outside Dhaka"
     }
     return "Outside Dhaka"
   }
+
+  // Add this useEffect after the existing useEffects for debugging
+  useEffect(() => {
+    if (userAddress) {
+      console.log("Current user address:", userAddress)
+      console.log("District:", userAddress.district)
+      console.log("Calculated shipping cost:", calculateShippingCost())
+    }
+  }, [userAddress])
 
   const shippingCost = calculateShippingCost()
   const currentTotal = totalAmount || total || 0

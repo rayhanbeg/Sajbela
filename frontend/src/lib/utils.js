@@ -1,21 +1,15 @@
 export const formatPrice = (price) => {
-  return new Intl.NumberFormat("bn-BD", {
-    style: "currency",
-    currency: "BDT",
-    currencyDisplay: "symbol",
-  })
-    .format(price)
-    .replace("BDT", "৳")
+  return `৳${Number(price).toLocaleString("en-BD", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`
 }
 
 export const formatCurrency = (price) => {
-  return new Intl.NumberFormat("bn-BD", {
-    style: "currency",
-    currency: "BDT",
-    currencyDisplay: "symbol",
-  })
-    .format(price)
-    .replace("BDT", "৳")
+  return `৳${Number(price).toLocaleString("en-BD", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`
 }
 
 export const formatDate = (date) => {

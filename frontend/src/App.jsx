@@ -1,3 +1,5 @@
+"use client"
+
 import { Routes, Route, useLocation } from "react-router-dom"
 import { useEffect } from "react"
 import { useDispatch, useSelector } from "react-redux"
@@ -25,6 +27,7 @@ import AdminOrders from "./pages/admin/AdminOrders"
 import AdminUsers from "./pages/admin/AdminUsers"
 import ProtectedRoute from "./components/ProtectedRoute"
 import { fetchUserProfile } from "./lib/store/authSlice"
+import WhatsAppButton from "./components/WhatsAppButton"
 
 // Component to handle scroll to top on route change
 const ScrollToTop = () => {
@@ -133,6 +136,7 @@ function App() {
         </Routes>
       </main>
       <Footer />
+      <WhatsAppButton />
     </div>
   )
 }

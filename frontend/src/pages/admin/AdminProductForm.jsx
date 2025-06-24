@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { useNavigate, useParams } from "react-router-dom"
@@ -56,6 +58,7 @@ const AdminProductForm = () => {
   ]
 
   const predefinedColors = [
+    { name: "Multi Color", hexCode: "#FF6B6B" }, // Add this as the first option
     { name: "Red", hexCode: "#FF0000" },
     { name: "Blue", hexCode: "#0000FF" },
     { name: "Green", hexCode: "#00FF00" },

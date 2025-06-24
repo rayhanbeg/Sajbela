@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { Star, ShoppingCart, Heart } from "lucide-react"
@@ -225,6 +227,7 @@ const ProductDetailPage = () => {
 
     // Generate a color based on the color name
     const colorMap = {
+      "multi color": "#FF6B6B", // Add this line for multi color
       red: "#FF0000",
       blue: "#0000FF",
       green: "#008000",
@@ -430,7 +433,10 @@ const ProductDetailPage = () => {
                           <div
                             className="w-8 h-8 rounded-full border-2 border-gray-300 shadow-sm flex-shrink-0 relative"
                             style={{
-                              backgroundColor: getColorHex(colorOption),
+                              background:
+                                colorOption.name.toLowerCase() === "multi color"
+                                  ? "linear-gradient(45deg, #FF6B6B, #4ECDC4, #45B7D1, #96CEB4, #FFEAA7)"
+                                  : getColorHex(colorOption),
                               borderColor: getColorHex(colorOption) === "#FFFFFF" ? "#E5E7EB" : "transparent",
                             }}
                           >
@@ -461,9 +467,7 @@ const ProductDetailPage = () => {
                           {colorOption.stock <= 0 ? (
                             <span className="text-sm text-red-500 font-medium">Out of Stock</span>
                           ) : (
-                            <div className="flex flex-col items-end">
-                              <span className="text-sm font-semibold text-green-600">Available</span>
-                            </div>
+                            <span className="text-sm font-semibold text-green-600">Available</span>
                           )}
                         </div>
                       </button>
@@ -544,7 +548,7 @@ const ProductDetailPage = () => {
                   >
                     +
                   </button>
-                  <span className="text-sm text-gray-500 ml-4">{getMaxStock()} available</span>
+                  <span className="text-sm text-gray-500 ml-4">Available</span>
                 </div>
               </div>
             )}

@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect } from "react"
 import { ordersAPI } from "../../lib/api"
 import { formatCurrency, formatDate } from "../../lib/utils"
@@ -113,6 +115,27 @@ const AdminOrders = () => {
     }
 
     return sizeFormats[size] || size
+  }
+
+  // Format complete address like in account page
+  const formatCompleteAddress = (address) => {
+    if (!address) return "No address provided"
+
+    const parts = []
+
+    if (address.fullName) parts.push(address.fullName)
+    if (address.address) parts.push(address.address)
+
+    // Add district and thana on same line like in account page
+    const locationParts = []
+    if (address.district) locationParts.push(address.district)
+    if (address.thana) locationParts.push(address.thana)
+    if (locationParts.length > 0) parts.push(locationParts.join(", "))
+
+    if (address.country) parts.push(address.country)
+    if (address.phone) parts.push(`Phone: ${address.phone}`)
+
+    return parts
   }
 
   if (loading && orders.length === 0) {
@@ -269,6 +292,13 @@ const AdminOrders = () => {
                       <div>
                         <div className="text-sm font-medium text-gray-900">{order.user?.name}</div>
                         <div className="text-sm text-gray-500">{order.user?.email}</div>
+                        {order.shippingAddress && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            {order.shippingAddress.district && order.shippingAddress.thana
+                              ? `${order.shippingAddress.district}, ${order.shippingAddress.thana}`
+                              : order.shippingAddress.district || order.shippingAddress.thana || "Address incomplete"}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(order.createdAt)}</td>
@@ -459,13 +489,11 @@ const AdminOrders = () => {
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Shipping Address</h3>
                   <div className="bg-gray-50 p-4 rounded-lg text-sm">
-                    <p className="font-medium">{selectedOrder.shippingAddress?.fullName}</p>
-                    <p>{selectedOrder.shippingAddress?.address}</p>
-                    <p>
-                      {selectedOrder.shippingAddress?.thana}, {selectedOrder.shippingAddress?.district}
-                    </p>
-                    <p>{selectedOrder.shippingAddress?.country}</p>
-                    <p>Phone: {selectedOrder.shippingAddress?.phone}</p>
+                    {formatCompleteAddress(selectedOrder.shippingAddress).map((line, index) => (
+                      <p key={index} className={index === 0 ? "font-medium" : ""}>
+                        {line}
+                      </p>
+                    ))}
                   </div>
                 </div>
 
