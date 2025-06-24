@@ -48,19 +48,8 @@ app.use("/api/reviews", reviewRoutes)
 app.use("/api/cart", cartRoutes)
 
 // Health check route
-app.get("/api/health", (req, res) => {
+app.get("/api", (req, res) => {
   res.json({ message: "Server is running!" })
-})
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack)
-  res.status(500).json({ message: "Something went wrong!" })
-})
-
-// 404 handler
-app.use("*", (req, res) => {
-  res.status(404).json({ message: "Route not found" })
 })
 
 // Connect to MongoDB
