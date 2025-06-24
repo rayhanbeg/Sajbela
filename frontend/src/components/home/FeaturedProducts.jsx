@@ -1,3 +1,5 @@
+"use client"
+
 import { Link } from "react-router-dom"
 import { useState, useEffect } from "react"
 import { Swiper, SwiperSlide } from "swiper/react"
@@ -46,6 +48,29 @@ const FeaturedProducts = () => {
     }
     return product.inStock && product.stock > 0
   }
+
+  useEffect(() => {
+    const style = document.createElement("style")
+    style.textContent = `
+    .featured-products-swiper .swiper-pagination {
+      position: relative !important;
+      margin-top: 2rem !important;
+    }
+    .featured-products-swiper .swiper-pagination-bullet {
+      background-color: #ec4899 !important;
+      opacity: 0.3 !important;
+    }
+    .featured-products-swiper .swiper-pagination-bullet-active {
+      opacity: 1 !important;
+      background-color: #db2777 !important;
+    }
+  `
+    document.head.appendChild(style)
+
+    return () => {
+      document.head.removeChild(style)
+    }
+  }, [])
 
   if (loading) {
     return (
@@ -228,21 +253,6 @@ const FeaturedProducts = () => {
           </Link>
         </div>
       </div>
-
-      <style jsx>{`
-        .featured-products-swiper .swiper-pagination {
-          position: relative !important;
-          margin-top: 2rem !important;
-        }
-        .featured-products-swiper .swiper-pagination-bullet {
-          background-color: #ec4899 !important;
-          opacity: 0.3 !important;
-        }
-        .featured-products-swiper .swiper-pagination-bullet-active {
-          opacity: 1 !important;
-          background-color: #db2777 !important;
-        }
-      `}</style>
     </section>
   )
 }
