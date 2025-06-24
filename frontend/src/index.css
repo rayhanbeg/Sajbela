@@ -1,0 +1,148 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 14px;
+  }
+
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    line-height: 1.5;
+    font-size: 0.875rem;
+    color: #374151;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: 600;
+    line-height: 1.2;
+    color: #111827;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+  h2 {
+    font-size: 1.75rem;
+  }
+  h3 {
+    font-size: 1.25rem;
+  }
+  h4 {
+    font-size: 1.125rem;
+  }
+  p {
+    font-size: 0.875rem;
+  }
+
+  @media (max-width: 768px) {
+    html {
+      font-size: 13px;
+    }
+    h1 {
+      font-size: 1.75rem;
+    }
+    h2 {
+      font-size: 1.5rem;
+    }
+    h3 {
+      font-size: 1.125rem;
+    }
+    p {
+      font-size: 0.8125rem;
+    }
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-pink-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-pink-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply border border-pink-600 text-pink-600 px-6 py-3 rounded-lg font-semibold hover:bg-pink-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors duration-200;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-md overflow-hidden border border-gray-100;
+  }
+
+  /* Centered content container */
+  .content-container {
+    @apply max-w-6xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Section spacing */
+  .section-spacing {
+    @apply py-12 md:py-16 lg:py-20;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #db2777;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #be185d;
+}
+
+/* Loading animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Focus styles for accessibility */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #e91e63;
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
