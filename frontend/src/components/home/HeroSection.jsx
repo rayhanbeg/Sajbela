@@ -36,17 +36,17 @@ const HeroSection = () => {
   const slides = [
     {
       id: 1,
-      image: "https://i.ibb.co/kj4yxt8/Chat-GPT-Image-Jun-21-2025-02-28-52-PM.png",
+      image: "https://res.cloudinary.com/dh6czikx1/image/upload/v1750672511/sajbela-products/absrovkh4qqri2isbhgh.png",
       alt: "Handmade Bangles Collection",
     },
     {
       id: 2,
-      image: "https://i.ibb.co/d0M9Rjkq/Chat-GPT-Image-Jun-21-2025-02-59-20-PM.png",
+      image: "https://res.cloudinary.com/dh6czikx1/image/upload/v1750584511/sajbela-products/ont8uvrvee094f17hann.png",
       alt: "Tamanna Kacher churi Collection",
     },
     {
       id: 3,
-      image: "https://i.ibb.co/rKwfK6FD/Chat-GPT-Image-Jun-21-2025-03-13-22-PM.png",
+      image: "https://res.cloudinary.com/dh6czikx1/image/upload/v1750578610/sajbela-products/olgvdbxqbr0q9ir69wvi.png",
       alt: "Metal Bangles Combo Collection",
     },
   ]
