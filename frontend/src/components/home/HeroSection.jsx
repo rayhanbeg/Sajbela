@@ -1,4 +1,3 @@
-"use client"
 
 import { Truck, Headphones, Award } from "lucide-react"
 import { Swiper, SwiperSlide } from "swiper/react"

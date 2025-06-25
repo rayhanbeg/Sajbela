@@ -1,4 +1,3 @@
-"use client"
 
 import { Routes, Route, useLocation } from "react-router-dom"
 import { useEffect } from "react"
@@ -78,8 +77,8 @@ function App() {
           <Route path="/auth/login" element={<LoginPage />} />
           <Route path="/auth/register" element={<RegisterPage />} />
           <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/contact" element={<ContactPage />} />
+          {/* <Route path="/about" element={<AboutPage />} />
+          <Route path="/contact" element={<ContactPage />} /> */}
           <Route path="/shipping" element={<ShippingPage />} />
           <Route path="/returns" element={<ReturnsPage />} />
           <Route path="/faq" element={<FAQPage />} />

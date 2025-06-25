@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useSelector, useDispatch } from "react-redux"
@@ -153,12 +151,6 @@ const Header = () => {
 
               <Link to="/products" className="text-white hover:text-pink-200 transition-colors">
                 Shop
-              </Link>
-              <Link to="/about" className="text-white hover:text-pink-200 transition-colors">
-                About
-              </Link>
-              <Link to="/contact" className="text-white hover:text-pink-200 transition-colors">
-                Contact
               </Link>
               {/* Admin Link - Only show for admin users */}
               {isAuthenticated && user?.role === "admin" && (
@@ -327,12 +319,6 @@ const Header = () => {
 
                 <Link to="/products" className="text-white hover:text-pink-200 transition-colors">
                   Shop
-                </Link>
-                <Link to="/about" className="text-white hover:text-pink-200 transition-colors">
-                  About
-                </Link>
-                <Link to="/contact" className="text-white hover:text-pink-200 transition-colors">
-                  Contact
                 </Link>
                 {/* Admin Link - Mobile */}
                 {isAuthenticated && user?.role === "admin" && (
