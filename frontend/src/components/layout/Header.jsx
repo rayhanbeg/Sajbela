@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useSelector, useDispatch } from "react-redux"
@@ -168,17 +170,17 @@ const Header = () => {
 
             {/* Search Bar - Desktop */}
             <form onSubmit={handleSearch} className="hidden md:flex items-center">
-              <div className="relative">
+              <div className="flex">
                 <input
                   type="text"
                   placeholder="Search products..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-64 px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  className="w-64 px-4 py-2.5 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-pink-500 h-10"
                 />
                 <button
                   type="submit"
-                  className="bg-pink-700 text-white px-4 py-2 rounded-r-lg hover:bg-pink-800 transition-colors"
+                  className="bg-pink-700 text-white px-4 py-2.5 rounded-r-lg hover:bg-pink-800 transition-colors h-10 flex items-center justify-center"
                 >
                   <Search className="h-5 w-5" />
                 </button>
@@ -252,12 +254,12 @@ const Header = () => {
                   placeholder="Search products..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-pink-500 h-10"
                   autoFocus
                 />
                 <button
                   type="submit"
-                  className="bg-pink-700 text-white px-4 py-2 rounded-r-lg hover:bg-pink-800 transition-colors"
+                  className="bg-pink-700 text-white px-4 py-2.5 rounded-r-lg hover:bg-pink-800 transition-colors h-10 flex items-center justify-center"
                 >
                   <Search className="h-5 w-5" />
                 </button>

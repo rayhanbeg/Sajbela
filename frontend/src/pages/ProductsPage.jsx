@@ -1,8 +1,9 @@
+"use client"
+
 import { useState, useEffect } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
 import { fetchProducts } from "../lib/store/productSlice"
-import { addToCartAsync } from "../lib/store/cartSlice"
 import { formatPrice } from "../lib/utils"
 import ProductFilters from "../components/products/ProductFilters"
 
@@ -11,8 +12,6 @@ const ProductsPage = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { products, loading, pagination } = useSelector((state) => state.products)
-  const { loading: cartLoading } = useSelector((state) => state.cart)
-  const { isAuthenticated } = useSelector((state) => state.auth)
 
   const [currentPage, setCurrentPage] = useState(1)
   const [sortBy, setSortBy] = useState("newest")
@@ -86,39 +85,6 @@ const ProductsPage = () => {
     dispatch(fetchProducts(params))
   }, [dispatch, filters, currentPage, sortBy, isInitialized])
 
-  const handleAddToCart = async (product, e) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    if (!isAuthenticated) {
-      const currentPath = window.location.pathname + window.location.search
-      navigate(`/auth/login?returnTo=${encodeURIComponent(currentPath)}`)
-      return
-    }
-
-    // For bangles or products with colors/sizes, redirect to product detail page
-    if (
-      product.category === "bangles" ||
-      (product.colors && product.colors.length > 0) ||
-      (product.sizes && product.sizes.length > 0)
-    ) {
-      navigate(`/products/${product._id}`)
-      return
-    }
-
-    // For simple products, add directly to cart
-    try {
-      await dispatch(
-        addToCartAsync({
-          productId: product._id,
-          quantity: 1,
-        }),
-      ).unwrap()
-    } catch (error) {
-      console.error("Failed to add to cart:", error)
-    }
-  }
-
   const renderStars = (rating) => {
     const stars = []
     const fullStars = Math.floor(rating)
@@ -167,13 +133,6 @@ const ProductsPage = () => {
       return product.colors.some((color) => color.available && color.stock > 0)
     }
     return product.inStock && product.stock > 0
-  }
-
-  const getButtonText = (product) => {
-    if (!isAvailable(product)) return "Not Available"
-    if (product.category === "bangles") return "Select Size"
-    if (product.colors && product.colors.length > 0) return "Select Options"
-    return "Add to Cart"
   }
 
   const handlePageChange = (page) => {
@@ -252,7 +211,6 @@ const ProductsPage = () => {
                       <div className="h-3 bg-gray-200 rounded w-2/3 animate-pulse"></div>
                       <div className="flex items-center justify-between">
                         <div className="h-5 bg-gray-200 rounded w-16 animate-pulse"></div>
-                        <div className="h-8 bg-gray-200 rounded w-20 animate-pulse"></div>
                       </div>
                     </div>
                   </div>
@@ -282,7 +240,7 @@ const ProductsPage = () => {
               </div>
             )}
 
-            {/* Products Grid - Manual Cards */}
+            {/* Products Grid - Uniform Card Size with Reduced Spacing */}
             {!loading && products.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                 {products.map((product) => (
@@ -291,12 +249,12 @@ const ProductsPage = () => {
                     className="group bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                     onClick={() => navigate(`/products/${product._id}`)}
                   >
-                    {/* Product Image */}
+                    {/* Product Image - Fixed aspect ratio */}
                     <div className="relative aspect-square overflow-hidden bg-gray-100">
                       <img
                         src={getImageUrl(product) || "/placeholder.svg"}
                         alt={product.name}
-                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         onError={(e) => {
                           e.target.src = "/placeholder.svg"
                         }}
@@ -313,19 +271,6 @@ const ProductsPage = () => {
                         </span>
                       </div>
 
-                      {/* Wishlist Button */}
-                      <div className="absolute top-2 right-2">
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                          }}
-                          className="bg-white p-2 rounded-full shadow-md hover:bg-gray-50 transition-colors"
-                        >
-                          ❤️
-                        </button>
-                      </div>
-
                       {/* Discount Badge */}
                       {product.originalPrice && product.originalPrice > product.price && (
                         <div className="absolute bottom-2 left-2">
@@ -336,19 +281,19 @@ const ProductsPage = () => {
                       )}
                     </div>
 
-                    {/* Product Info */}
+                    {/* Product Info - Reduced spacing */}
                     <div className="p-3 md:p-4">
-                      <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-pink-600 transition-colors line-clamp-2 text-sm md:text-base">
+                      <h3 className="font-semibold text-gray-900 mb-1 group-hover:text-pink-600 transition-colors text-sm md:text-base line-clamp-2 leading-tight">
                         {product.name}
                       </h3>
 
-                      {/* Rating */}
-                      <div className="flex items-center mb-2">
+                      {/* Rating - Reduced margin */}
+                      <div className="flex items-center mb-1">
                         <div className="flex items-center text-sm">{renderStars(product.rating || 0)}</div>
                         <span className="text-xs text-gray-500 ml-2">({product.numReviews || 0})</span>
                       </div>
 
-                      {/* Price and Add to Cart */}
+                      {/* Price - Reduced margin */}
                       <div className="flex items-center justify-between">
                         <div className="flex flex-col">
                           <span className="text-sm md:text-base font-bold text-pink-600">
@@ -360,13 +305,6 @@ const ProductsPage = () => {
                             </span>
                           )}
                         </div>
-                        <button
-                          onClick={(e) => handleAddToCart(product, e)}
-                          disabled={cartLoading || !isAvailable(product)}
-                          className="bg-pink-600 text-white py-2 px-3 rounded-lg hover:bg-pink-700 transition-colors text-xs md:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {cartLoading ? "Adding..." : getButtonText(product)}
-                        </button>
                       </div>
                     </div>
                   </div>

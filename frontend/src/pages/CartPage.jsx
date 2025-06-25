@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { useSelector, useDispatch } from "react-redux"
-import { Link } from "react-router-dom"
+import { useNavigate, Link } from "react-router-dom"
 import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react"
+import { addressesAPI } from "../lib/api"
+import { formatPrice } from "../lib/utils"
 import {
   updateQuantity,
   removeFromCart,
@@ -13,47 +15,75 @@ import {
   removeFromCartAsync,
   clearCartAsync,
 } from "../lib/store/cartSlice"
-import api from "../lib/api"
 
 const CartPage = () => {
+  const navigate = useNavigate()
   const dispatch = useDispatch()
-  const { items, total, totalAmount, loading } = useSelector((state) => state.cart)
-  const { isAuthenticated, user } = useSelector((state) => state.auth)
-
-  // State for user's primary address
+  const { items, totalAmount, loading: cartLoading } = useSelector((state) => state.cart)
+  const { isAuthenticated } = useSelector((state) => state.auth)
   const [userAddress, setUserAddress] = useState(null)
   const [addressLoading, setAddressLoading] = useState(false)
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false)
 
-  // Load cart and user address on component mount
+  // Initialize cart data
   useEffect(() => {
-    if (isAuthenticated) {
-      dispatch(fetchCart())
-      fetchUserAddress()
+    const loadCartData = async () => {
+      if (isAuthenticated) {
+        try {
+          await dispatch(fetchCart()).unwrap()
+          await fetchUserAddress()
+        } catch (error) {
+          console.error("Failed to load cart data:", error)
+        }
+      }
+      setInitialLoadComplete(true)
     }
-  }, [dispatch, isAuthenticated])
 
-  // Fetch user's primary address
+    if (!initialLoadComplete) {
+      loadCartData()
+    }
+  }, [isAuthenticated, initialLoadComplete, dispatch])
+
+  // Redirect if cart is empty after load
+  useEffect(() => {
+    if (initialLoadComplete && (!items || items.length === 0)) {
+      navigate("/cart-empty")
+    }
+  }, [items, initialLoadComplete, navigate])
+
   const fetchUserAddress = async () => {
     try {
       setAddressLoading(true)
-      const response = await api.get("/addresses")
-
-      // Check if response has data and it's an array
-      if (response.data && response.data.data && Array.isArray(response.data.data)) {
-        const addresses = response.data.data
-        // Get the first address or primary address
-        const primaryAddress = addresses.find((addr) => addr.isPrimary) || addresses[0]
-        setUserAddress(primaryAddress)
-      } else {
-        console.log("No addresses found or invalid response format")
-        setUserAddress(null)
-      }
+      const res = await addressesAPI.getAll()
+      const addresses = res.data || []
+      const primaryAddress = addresses.find((addr) => addr.isPrimary) || addresses[0]
+      setUserAddress(primaryAddress)
     } catch (error) {
-      console.error("Failed to fetch user address:", error)
-      setUserAddress(null)
+      console.error("Error fetching address:", error)
     } finally {
       setAddressLoading(false)
     }
+  }
+
+  const calculateSubtotal = () => {
+    if (!items) return 0
+    return items.reduce((sum, item) => {
+      const product = item.product || item
+      const price = product.price || item.price || 0
+      const quantity = item.quantity || 1
+      return sum + price * quantity
+    }, 0)
+  }
+
+  const calculateShippingCost = (subtotal, address) => {
+    if (subtotal >= 2000) return 0
+    if (address?.district?.toLowerCase() === "dhaka") return 60
+    return 100
+  }
+
+  const getShippingLocation = (address) => {
+    if (address?.district?.toLowerCase() === "dhaka") return "Inside Dhaka"
+    return "Outside Dhaka"
   }
 
   const handleQuantityChange = async (item, newQuantity) => {
@@ -105,9 +135,7 @@ const CartPage = () => {
     }
   }
 
-  // Enhanced image URL function to handle both database and localStorage cart items
   const getImageUrl = (item) => {
-    // For database cart items (item has product field)
     if (item.product) {
       if (item.product.images && item.product.images.length > 0) {
         return item.product.images[0].url || "/placeholder.svg"
@@ -115,71 +143,25 @@ const CartPage = () => {
       return item.product.image || "/placeholder.svg"
     }
 
-    // For localStorage cart items (item is the product itself)
     if (item.images && item.images.length > 0) {
       return item.images[0].url || "/placeholder.svg"
     }
     return item.image || "/placeholder.svg"
   }
 
-  // Enhanced function to get product name
   const getProductName = (item) => {
     return item.product?.name || item.name || "Unknown Product"
   }
 
-  // Enhanced function to get product price
   const getProductPrice = (item) => {
     return item.price || item.product?.price || 0
   }
 
-  const calculateShippingCost = () => {
-    const currentTotal = totalAmount || total || 0
-    if (currentTotal >= 2000) return 0 // Free shipping for orders above 2000 taka
+  const subtotal = calculateSubtotal()
+  const shippingCost = calculateShippingCost(subtotal, userAddress)
+  const finalTotal = subtotal + shippingCost
 
-    // If user has address, use their district
-    if (userAddress && userAddress.district) {
-      const district = userAddress.district.toLowerCase().trim()
-      console.log("User district:", district) // Debug log
-
-      // Check if district is Dhaka (exact match or contains dhaka)
-      const isDhaka =
-        district === "dhaka" || district === "dhaka district" || district.includes("dhaka") || district === "ঢাকা"
-
-      console.log("Is Dhaka:", isDhaka) // Debug log
-      return isDhaka ? 60 : 100
-    }
-
-    // Default to outside Dhaka if no address
-    return 100
-  }
-
-  const getShippingLocation = () => {
-    if (userAddress && userAddress.district) {
-      const district = userAddress.district.toLowerCase().trim()
-
-      // Check if district is Dhaka (exact match or contains dhaka)
-      const isDhaka =
-        district === "dhaka" || district === "dhaka district" || district.includes("dhaka") || district === "ঢাকা"
-
-      return isDhaka ? "Inside Dhaka" : "Outside Dhaka"
-    }
-    return "Outside Dhaka"
-  }
-
-  // Add this useEffect after the existing useEffects for debugging
-  useEffect(() => {
-    if (userAddress) {
-      console.log("Current user address:", userAddress)
-      console.log("District:", userAddress.district)
-      console.log("Calculated shipping cost:", calculateShippingCost())
-    }
-  }, [userAddress])
-
-  const shippingCost = calculateShippingCost()
-  const currentTotal = totalAmount || total || 0
-  const finalTotal = currentTotal + shippingCost
-
-  if (loading) {
+  if (cartLoading && !initialLoadComplete) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -256,7 +238,7 @@ const CartPage = () => {
           <button
             onClick={handleClearCart}
             className="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
-            disabled={loading}
+            disabled={cartLoading}
           >
             Clear Cart
           </button>
@@ -269,7 +251,7 @@ const CartPage = () => {
               <div key={item._id} className="bg-white p-6 rounded-lg shadow-md">
                 <div className="flex items-center space-x-4">
                   <img
-                    src={getImageUrl(item) || "/placeholder.svg"}
+                    src={getImageUrl(item)}
                     alt={getProductName(item)}
                     className="w-20 h-20 object-cover rounded-lg"
                     onError={(e) => {
@@ -278,7 +260,7 @@ const CartPage = () => {
                   />
                   <div className="flex-1">
                     <h3 className="font-semibold text-gray-900">{getProductName(item)}</h3>
-                    <p className="text-gray-600">৳{getProductPrice(item)}</p>
+                    <p className="text-gray-600">{formatPrice(getProductPrice(item))}</p>
                     {item.selectedSize && <p className="text-sm text-gray-500">Size: {item.selectedSize}</p>}
                     {item.selectedColor && <p className="text-sm text-gray-500">Color: {item.selectedColor}</p>}
                   </div>
@@ -286,7 +268,7 @@ const CartPage = () => {
                     <button
                       onClick={() => handleQuantityChange(item, item.quantity - 1)}
                       className="p-1 hover:bg-gray-100 rounded disabled:opacity-50"
-                      disabled={loading}
+                      disabled={cartLoading}
                     >
                       <Minus className="h-4 w-4" />
                     </button>
@@ -294,17 +276,19 @@ const CartPage = () => {
                     <button
                       onClick={() => handleQuantityChange(item, item.quantity + 1)}
                       className="p-1 hover:bg-gray-100 rounded disabled:opacity-50"
-                      disabled={loading}
+                      disabled={cartLoading}
                     >
                       <Plus className="h-4 w-4" />
                     </button>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900">৳{getProductPrice(item) * item.quantity}</p>
+                    <p className="font-semibold text-gray-900">
+                      {formatPrice(getProductPrice(item) * item.quantity)}
+                    </p>
                     <button
                       onClick={() => handleRemoveItem(item)}
                       className="text-red-600 hover:text-red-700 mt-1 disabled:opacity-50"
-                      disabled={loading}
+                      disabled={cartLoading}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -345,29 +329,40 @@ const CartPage = () => {
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">৳{currentTotal}</span>
+                  <span className="font-medium">{formatPrice(subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Shipping ({getShippingLocation()})</span>
-                  <span className="font-medium">{shippingCost === 0 ? "Free" : `৳${shippingCost}`}</span>
+                  <span className="text-gray-600">Shipping ({getShippingLocation(userAddress)})</span>
+                  <span className="font-medium">{shippingCost === 0 ? "Free" : formatPrice(shippingCost)}</span>
                 </div>
+                {shippingCost === 0 ? (
+                  <p className="text-xs text-green-600 mt-1">🎉 Free shipping on orders above ৳2000!</p>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {userAddress?.district?.toLowerCase() === "dhaka"
+                      ? "Shipping (Inside Dhaka): ৳60"
+                      : "Shipping (Outside Dhaka): ৳100"}
+                  </p>
+                )}
                 <div className="border-t pt-2">
                   <div className="flex justify-between">
                     <span className="text-lg font-semibold">Total</span>
-                    <span className="text-lg font-semibold">৳{finalTotal}</span>
+                    <span className="text-lg font-semibold">{formatPrice(finalTotal)}</span>
                   </div>
                 </div>
               </div>
 
-              {currentTotal >= 2000 && (
+              {subtotal >= 2000 && (
                 <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                   <p className="text-sm text-green-800">🎉 You qualify for free shipping!</p>
                 </div>
               )}
 
-              {currentTotal < 2000 && (
+              {subtotal < 2000 && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">💡 Add ৳{2000 - currentTotal} more to get free shipping!</p>
+                  <p className="text-sm text-blue-800">
+                    💡 Add {formatPrice(2000 - subtotal)} more to get free shipping!
+                  </p>
                 </div>
               )}
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { Star, ShoppingCart, Heart } from "lucide-react"
+import { Star, ShoppingCart, Heart, ChevronDown } from "lucide-react"
 import { useDispatch, useSelector } from "react-redux"
 import { addToCartAsync } from "../lib/store/cartSlice"
 import { fetchProductById, clearCurrentProduct } from "../lib/store/productSlice"
@@ -21,6 +21,8 @@ const ProductDetailPage = () => {
   const [selectedSize, setSelectedSize] = useState(null)
   const [selectedColor, setSelectedColor] = useState(null)
   const [activeTab, setActiveTab] = useState("reviews")
+  const [isColorDropdownOpen, setIsColorDropdownOpen] = useState(false)
+  const [isSizeDropdownOpen, setIsSizeDropdownOpen] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -45,11 +47,13 @@ const ProductDetailPage = () => {
   const handleSizeSelect = (sizeOption) => {
     setSelectedSize(sizeOption)
     setQuantity(1) // Reset quantity when size changes
+    setIsSizeDropdownOpen(false)
   }
 
   const handleColorSelect = (colorOption) => {
     setSelectedColor(colorOption)
     setQuantity(1) // Reset quantity when color changes
+    setIsColorDropdownOpen(false)
   }
 
   const handleAddToCart = async () => {
@@ -327,11 +331,19 @@ const ProductDetailPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
           {/* Product Images */}
           <div className="space-y-4">
-            <div className="aspect-square overflow-hidden rounded-lg bg-gray-100">
+            <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-gray-100">
               <img
                 src={getImageUrl(selectedImage) || "/placeholder.svg"}
                 alt={product.name}
                 className="w-full h-full object-contain"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '500px',
+                  width: 'auto',
+                  height: 'auto',
+                  display: 'block',
+                  margin: '0 auto'
+                }}
                 onError={(e) => {
                   e.target.src = "/placeholder.svg"
                 }}
@@ -343,7 +355,7 @@ const ProductDetailPage = () => {
                   <button
                     key={index}
                     onClick={() => setSelectedImage(index)}
-                    className={`aspect-square overflow-hidden rounded border-2 transition-colors bg-gray-100 ${
+                    className={`relative aspect-square overflow-hidden rounded border-2 transition-colors bg-gray-100 ${
                       selectedImage === index ? "border-pink-600" : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
@@ -351,6 +363,14 @@ const ProductDetailPage = () => {
                       src={image.url || "/placeholder.svg"}
                       alt={`${product.name} ${index + 1}`}
                       className="w-full h-full object-contain"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '100px',
+                        width: 'auto',
+                        height: 'auto',
+                        display: 'block',
+                        margin: '0 auto'
+                      }}
                       onError={(e) => {
                         e.target.src = "/placeholder.svg"
                       }}
@@ -364,7 +384,7 @@ const ProductDetailPage = () => {
           {/* Product Info */}
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
               <div className="flex items-center mb-4">
                 <div className="flex items-center">
                   {[...Array(5)].map((_, i) => (
@@ -380,11 +400,11 @@ const ProductDetailPage = () => {
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <span className="text-3xl font-bold text-gray-900">{formatPrice(product.price)}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-2xl md:text-3xl font-bold text-gray-900">{formatPrice(product.price)}</span>
               {product.originalPrice && (
                 <>
-                  <span className="text-xl text-gray-500 line-through">{formatPrice(product.originalPrice)}</span>
+                  <span className="text-lg md:text-xl text-gray-500 line-through">{formatPrice(product.originalPrice)}</span>
                   <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-sm font-medium">
                     -{discountPercentage}% OFF
                   </span>
@@ -408,120 +428,159 @@ const ProductDetailPage = () => {
               </div>
             )}
 
-            {/* Color Selection - Enhanced with quantity display */}
+            {/* Color Selection Dropdown */}
             {product.colors && product.colors.length > 0 && (
               <div className="space-y-3">
-                <h3 className="text-lg font-semibold text-gray-900">Available Colors</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {product.colors
-                    .filter((colorOption) => colorOption.available)
-                    .map((colorOption, index) => (
-                      <button
-                        key={`${colorOption.name}-${index}`}
-                        onClick={() => handleColorSelect(colorOption)}
-                        disabled={colorOption.stock <= 0}
-                        className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-200 ${
-                          selectedColor && selectedColor.name === colorOption.name
-                            ? "border-pink-600 bg-pink-50 ring-2 ring-pink-200 shadow-md"
-                            : colorOption.stock <= 0
-                              ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
-                              : "border-gray-300 hover:border-pink-300 hover:bg-gray-50 hover:shadow-sm"
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          {/* Color Circle */}
+                <h3 className="text-lg font-semibold text-gray-900">Select Color</h3>
+                <div className="relative">
+                  <button
+                    onClick={() => setIsColorDropdownOpen(!isColorDropdownOpen)}
+                    className={`w-full p-3 md:p-4 border rounded-lg text-left flex items-center justify-between transition-colors ${
+                      selectedColor ? "border-pink-600 bg-pink-50" : "border-gray-300 hover:border-gray-400 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      {selectedColor ? (
+                        <>
                           <div
-                            className="w-8 h-8 rounded-full border-2 border-gray-300 shadow-sm flex-shrink-0 relative"
+                            className="w-6 h-6 rounded-full border-2 border-gray-300 shadow-sm"
                             style={{
                               background:
-                                colorOption.name.toLowerCase() === "multi color"
+                                selectedColor.name.toLowerCase() === "multi color"
                                   ? "linear-gradient(45deg, #FF6B6B, #4ECDC4, #45B7D1, #96CEB4, #FFEAA7)"
-                                  : getColorHex(colorOption),
-                              borderColor: getColorHex(colorOption) === "#FFFFFF" ? "#E5E7EB" : "transparent",
+                                  : getColorHex(selectedColor),
+                              borderColor: getColorHex(selectedColor) === "#FFFFFF" ? "#E5E7EB" : "transparent",
                             }}
+                          />
+                          <span className="font-medium text-gray-900">{selectedColor.name}</span>
+                          <span className="text-sm text-green-600">
+                            {selectedColor.stock > 0 ? "Available" : "Out of Stock"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-gray-500">Choose a color</span>
+                      )}
+                    </div>
+                    <ChevronDown
+                      className={`h-5 w-5 text-gray-400 transition-transform ${
+                        isColorDropdownOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {isColorDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {product.colors
+                        .filter((colorOption) => colorOption.available)
+                        .map((colorOption, index) => (
+                          <button
+                            key={`${colorOption.name}-${index}`}
+                            onClick={() => handleColorSelect(colorOption)}
+                            disabled={colorOption.stock <= 0}
+                            className={`w-full p-2 md:p-3 text-left hover:bg-gray-50 flex items-center justify-between transition-colors ${
+                              colorOption.stock <= 0 ? "opacity-50 cursor-not-allowed" : ""
+                            } ${selectedColor && selectedColor.name === colorOption.name ? "bg-pink-50" : ""}`}
                           >
-                            {/* Add a small checkmark if selected */}
-                            {selectedColor && selectedColor.name === colorOption.name && (
-                              <div className="absolute inset-0 rounded-full flex items-center justify-center">
-                                <svg
-                                  className="w-4 h-4 text-white drop-shadow-sm"
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                >
-                                  <path
-                                    fillRule="evenodd"
-                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                    clipRule="evenodd"
-                                  />
-                                </svg>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Color Name */}
-                          <span className="font-medium text-gray-900">{colorOption.name}</span>
-                        </div>
-
-                        {/* Stock Info */}
-                        <div className="text-right">
-                          {colorOption.stock <= 0 ? (
-                            <span className="text-sm text-red-500 font-medium">Out of Stock</span>
-                          ) : (
-                            <span className="text-sm font-semibold text-green-600">Available</span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
+                            <div className="flex items-center space-x-3">
+                              <div
+                                className="w-6 h-6 rounded-full border-2 border-gray-300 shadow-sm"
+                                style={{
+                                  background:
+                                    colorOption.name.toLowerCase() === "multi color"
+                                      ? "linear-gradient(45deg, #FF6B6B, #4ECDC4, #45B7D1, #96CEB4, #FFEAA7)"
+                                      : getColorHex(colorOption),
+                                  borderColor: getColorHex(colorOption) === "#FFFFFF" ? "#E5E7EB" : "transparent",
+                                }}
+                              />
+                              <span className="font-medium text-gray-900">{colorOption.name}</span>
+                            </div>
+                            <span
+                              className={`text-sm font-medium ${
+                                colorOption.stock > 0 ? "text-green-600" : "text-red-500"
+                              }`}
+                            >
+                              {colorOption.stock > 0 ? "Available" : "Out of Stock"}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
                 </div>
                 {!selectedColor && (
-                  <p className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg border border-orange-200">
+                  <p className="text-sm text-orange-600 bg-orange-50 p-2 md:p-3 rounded-lg border border-orange-200">
                     ⚠️ Please select a color to continue
                   </p>
                 )}
               </div>
             )}
 
-            {/* Size Selection for Bangles */}
+            {/* Size Selection Dropdown for Bangles */}
             {product.category === "bangles" && product.sizes && product.sizes.length > 0 && (
               <div className="space-y-3">
-                <h3 className="text-lg font-semibold text-gray-900">Available Sizes</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {product.sizes
-                    .filter((sizeOption) => sizeOption.size && sizeOption.size.trim() !== "")
-                    .map((sizeOption, index) => (
-                      <button
-                        key={`${sizeOption.size}-${index}`}
-                        onClick={() => handleSizeSelect(sizeOption)}
-                        disabled={!sizeOption.available || sizeOption.stock <= 0}
-                        className={`p-3 border rounded-lg text-left transition-colors ${
-                          selectedSize && selectedSize.size === sizeOption.size
-                            ? "border-pink-600 bg-pink-50 ring-2 ring-pink-200"
-                            : !sizeOption.available || sizeOption.stock <= 0
-                              ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
-                              : "border-gray-300 hover:border-pink-300 hover:bg-gray-50"
-                        }`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <span className="font-semibold text-gray-900">{sizeOption.size}</span>
-                            {sizeOption.measurement && (
-                              <span className="text-sm text-gray-600 ml-2">– {sizeOption.measurement}</span>
-                            )}
-                          </div>
-                          {!sizeOption.available || sizeOption.stock <= 0 ? (
-                            <span className="text-xs text-red-500 font-medium">Out of Stock</span>
-                          ) : (
-                            <span className="text-xs text-green-600 font-medium">Available</span>
+                <h3 className="text-lg font-semibold text-gray-900">Select Size</h3>
+                <div className="relative">
+                  <button
+                    onClick={() => setIsSizeDropdownOpen(!isSizeDropdownOpen)}
+                    className={`w-full p-3 md:p-4 border rounded-lg text-left flex items-center justify-between transition-colors ${
+                      selectedSize ? "border-pink-600 bg-pink-50" : "border-gray-300 hover:border-gray-400 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      {selectedSize ? (
+                        <>
+                          <span className="font-semibold text-gray-900">{selectedSize.size}</span>
+                          {selectedSize.measurement && (
+                            <span className="text-sm text-gray-600">– {selectedSize.measurement}</span>
                           )}
-                        </div>
-                      </button>
-                    ))}
+                          <span className="text-sm text-green-600">
+                            {selectedSize.stock > 0 ? "Available" : "Out of Stock"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-gray-500">Choose a size</span>
+                      )}
+                    </div>
+                    <ChevronDown
+                      className={`h-5 w-5 text-gray-400 transition-transform ${isSizeDropdownOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+
+                  {isSizeDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {product.sizes
+                        .filter((sizeOption) => sizeOption.size && sizeOption.size.trim() !== "")
+                        .map((sizeOption, index) => (
+                          <button
+                            key={`${sizeOption.size}-${index}`}
+                            onClick={() => handleSizeSelect(sizeOption)}
+                            disabled={!sizeOption.available || sizeOption.stock <= 0}
+                            className={`w-full p-2 md:p-3 text-left hover:bg-gray-50 flex items-center justify-between transition-colors ${
+                              !sizeOption.available || sizeOption.stock <= 0 ? "opacity-50 cursor-not-allowed" : ""
+                            } ${selectedSize && selectedSize.size === sizeOption.size ? "bg-pink-50" : ""}`}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <span className="font-semibold text-gray-900">{sizeOption.size}</span>
+                              {sizeOption.measurement && (
+                                <span className="text-sm text-gray-600">– {sizeOption.measurement}</span>
+                              )}
+                            </div>
+                            <span
+                              className={`text-sm font-medium ${
+                                sizeOption.available && sizeOption.stock > 0 ? "text-green-600" : "text-red-500"
+                              }`}
+                            >
+                              {sizeOption.available && sizeOption.stock > 0 ? "Available" : "Out of Stock"}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
                 </div>
                 {product.sizes.filter((s) => s.size && s.size.trim() !== "").length === 0 && (
                   <p className="text-sm text-gray-500 bg-gray-50 p-2 rounded">No sizes available for this product.</p>
                 )}
                 {!selectedSize && product.sizes.filter((s) => s.size && s.size.trim() !== "").length > 0 && (
-                  <p className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg border border-orange-200">
+                  <p className="text-sm text-orange-600 bg-orange-50 p-2 md:p-3 rounded-lg border border-orange-200">
                     ⚠️ Please select a size to continue
                   </p>
                 )}
@@ -536,29 +595,31 @@ const ProductDetailPage = () => {
                   <button
                     onClick={() => handleQuantityChange(-1)}
                     disabled={quantity <= 1}
-                    className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 md:w-10 md:h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     -
                   </button>
-                  <span className="text-xl font-semibold min-w-[3rem] text-center">{quantity}</span>
+                  <span className="text-lg md:text-xl font-semibold min-w-[2rem] md:min-w-[3rem] text-center">
+                    {quantity}
+                  </span>
                   <button
                     onClick={() => handleQuantityChange(1)}
                     disabled={quantity >= getMaxStock()}
-                    className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 md:w-10 md:h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     +
                   </button>
-                  <span className="text-sm text-gray-500 ml-4">Available</span>
+                  <span className="text-sm text-gray-500 ml-2 md:ml-4">Available</span>
                 </div>
               </div>
             )}
 
             {/* Action Buttons */}
-            <div className="flex space-x-4">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleAddToCart}
                 disabled={isButtonDisabled()}
-                className="flex-1 bg-pink-600 text-white py-3 px-6 rounded-lg hover:bg-pink-700 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-pink-600 text-white py-2 md:py-3 px-4 md:px-6 rounded-lg hover:bg-pink-700 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ShoppingCart className="h-5 w-5 mr-2" />
                 {getButtonText("add")}
@@ -567,19 +628,19 @@ const ProductDetailPage = () => {
               <button
                 onClick={handleBuyNow}
                 disabled={isButtonDisabled()}
-                className="flex-1 bg-gray-900 text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-gray-900 text-white py-2 md:py-3 px-4 md:px-6 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {getButtonText("buy")}
               </button>
 
-              <button className="p-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+              <button className="p-2 md:p-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                 <Heart className="h-5 w-5" />
               </button>
             </div>
 
             {/* Combo Items Display */}
             {product.isCombo && product.comboItems && product.comboItems.length > 0 && (
-              <div className="bg-pink-50 p-4 rounded-lg">
+              <div className="bg-pink-50 p-3 md:p-4 rounded-lg">
                 <h3 className="font-semibold text-gray-900 mb-2">This Combo Includes:</h3>
                 <ul className="space-y-1">
                   {product.comboItems.map((item, index) => (
@@ -597,8 +658,8 @@ const ProductDetailPage = () => {
               </div>
             )}
 
-            {/* Delivery Information - Removed 7 days return */}
-            <div className="bg-gray-50 p-4 rounded-lg">
+            {/* Delivery Information */}
+            <div className="bg-gray-50 p-3 md:p-4 rounded-lg">
               <h3 className="font-semibold text-gray-900 mb-2">Delivery Information</h3>
               <ul className="text-sm text-gray-600 space-y-1">
                 <li>• Free delivery on orders above ৳2000</li>
@@ -610,8 +671,8 @@ const ProductDetailPage = () => {
         </div>
 
         {/* Product Details Tabs */}
-        <div className="border-t border-gray-200 pt-8">
-          <div className="flex space-x-8 mb-8">
+        <div className="border-t border-gray-200 pt-6 md:pt-8">
+          <div className="flex flex-wrap gap-4 md:gap-8 mb-6 md:mb-8">
             {tabs.map((tab) => (
               <button
                 key={tab.id}

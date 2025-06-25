@@ -68,8 +68,8 @@ const ComboSection = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="card animate-pulse">
-                <div className="bg-gray-300 h-48 rounded-t-lg"></div>
-                <div className="p-4">
+                <div className="bg-gray-300 aspect-square rounded-t-lg"></div>
+                <div className="p-4 h-32">
                   <div className="h-4 bg-gray-300 rounded mb-2"></div>
                   <div className="h-3 bg-gray-300 rounded mb-3"></div>
                   <div className="h-8 bg-gray-300 rounded"></div>
@@ -98,11 +98,11 @@ const ComboSection = () => {
           {combos.map((combo) => (
             <Link key={combo._id} to={`/products/${combo._id}`} className="group">
               <div className="card hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                <div className="relative overflow-hidden">
+                <div className="relative overflow-hidden aspect-square">
                   <img
                     src={combo.images?.[0]?.url || "/placeholder.svg"}
                     alt={combo.name}
-                    className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                   {combo.comboDiscount > 0 && (
                     <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
@@ -116,14 +116,16 @@ const ComboSection = () => {
                   </div>
                 </div>
 
-                <div className="p-4">
-                  <h3 className="text-sm md:text-base font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-pink-600 transition-colors">
-                    {combo.name}
-                  </h3>
+                <div className="p-4 h-32 flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-sm md:text-base font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-pink-600 transition-colors leading-tight">
+                      {combo.name}
+                    </h3>
 
-                  <div className="flex items-center gap-1 mb-2">
-                    <div className="flex items-center">{renderStars(combo.rating || 0)}</div>
-                    <span className="text-xs text-gray-500">({combo.numReviews || 0})</span>
+                    <div className="flex items-center gap-1 mb-2">
+                      <div className="flex items-center">{renderStars(combo.rating || 0)}</div>
+                      <span className="text-xs text-gray-500">({combo.numReviews || 0})</span>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between">

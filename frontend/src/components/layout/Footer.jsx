@@ -91,9 +91,9 @@ const Footer = () => {
             <h4 className="text-lg font-semibold mb-4">Contact Info</h4>
             <div className="space-y-2 text-gray-300">
               <p>📍 Dhaka, Bangladesh</p>
-              <p>📞 +880-1234-567890</p>
-              <p>✉️ info@sajbela.com</p>
-              <p>🕒 Mon-Sat: 9AM-8PM</p>
+              <p>📞 +8801782-723804</p>
+              {/* <p>✉️ info@sajbela.com</p> */}
+              <p>🕒 24/7</p>
             </div>
           </div>
         </div>

@@ -117,27 +117,6 @@ const AdminOrders = () => {
     return sizeFormats[size] || size
   }
 
-  // Format complete address like in account page
-  const formatCompleteAddress = (address) => {
-    if (!address) return "No address provided"
-
-    const parts = []
-
-    if (address.fullName) parts.push(address.fullName)
-    if (address.address) parts.push(address.address)
-
-    // Add district and thana on same line like in account page
-    const locationParts = []
-    if (address.district) locationParts.push(address.district)
-    if (address.thana) locationParts.push(address.thana)
-    if (locationParts.length > 0) parts.push(locationParts.join(", "))
-
-    if (address.country) parts.push(address.country)
-    if (address.phone) parts.push(`Phone: ${address.phone}`)
-
-    return parts
-  }
-
   if (loading && orders.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -294,9 +273,12 @@ const AdminOrders = () => {
                         <div className="text-sm text-gray-500">{order.user?.email}</div>
                         {order.shippingAddress && (
                           <div className="text-xs text-gray-400 mt-1">
-                            {order.shippingAddress.district && order.shippingAddress.thana
-                              ? `${order.shippingAddress.district}, ${order.shippingAddress.thana}`
-                              : order.shippingAddress.district || order.shippingAddress.thana || "Address incomplete"}
+                            {order.shippingAddress.city &&
+                            (order.shippingAddress.postalCode || order.shippingAddress.postalCode)
+                              ? `${order.shippingAddress.city}, ${order.shippingAddress.postalCode}`
+                              : order.shippingAddress.city ||
+                                order.shippingAddress.postalCode ||
+                                "Address incomplete"}
                           </div>
                         )}
                       </div>
@@ -489,11 +471,29 @@ const AdminOrders = () => {
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Shipping Address</h3>
                   <div className="bg-gray-50 p-4 rounded-lg text-sm">
-                    {formatCompleteAddress(selectedOrder.shippingAddress).map((line, index) => (
-                      <p key={index} className={index === 0 ? "font-medium" : ""}>
-                        {line}
-                      </p>
-                    ))}
+                    {selectedOrder.shippingAddress ? (
+                      <>
+                        {selectedOrder.shippingAddress.fullName && (
+                          <p className="font-medium">{selectedOrder.shippingAddress.fullName}</p>
+                        )}
+                        {selectedOrder.shippingAddress.address && <p>{selectedOrder.shippingAddress.address}</p>}
+                        {(selectedOrder.shippingAddress.district ||
+                          selectedOrder.shippingAddress.thana ||
+                          selectedOrder.shippingAddress.postalCode) && (
+                          <p>
+                            {selectedOrder.shippingAddress.district && selectedOrder.shippingAddress.district}
+                            {selectedOrder.shippingAddress.district &&
+                              (selectedOrder.shippingAddress.thana || selectedOrder.shippingAddress.postalCode) &&
+                              ", "}
+                            {selectedOrder.shippingAddress.thana || selectedOrder.shippingAddress.postalCode}
+                          </p>
+                        )}
+                        {selectedOrder.shippingAddress.country && <p>{selectedOrder.shippingAddress.country}</p>}
+                        {selectedOrder.shippingAddress.phone && <p>Phone: {selectedOrder.shippingAddress.phone}</p>}
+                      </>
+                    ) : (
+                      <p>No address provided</p>
+                    )}
                   </div>
                 </div>
 
