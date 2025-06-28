@@ -62,7 +62,7 @@ const ProductDetailPage = () => {
     if (!isAuthenticated) {
       // Redirect to login with return path
       const currentPath = window.location.pathname
-      navigate(`/auth/login?returnTo=${encodeURIComponent(currentPath)}`)
+      navigate(`/auth/register?returnTo=${encodeURIComponent(currentPath)}`)
       return
     }
 
@@ -102,7 +102,7 @@ const ProductDetailPage = () => {
     if (!isAuthenticated) {
       // Redirect to login with return path
       const currentPath = window.location.pathname
-      navigate(`/auth/login?returnTo=${encodeURIComponent(currentPath)}`)
+      navigate(`/auth/register?returnTo=${encodeURIComponent(currentPath)}`)
       return
     }
 
