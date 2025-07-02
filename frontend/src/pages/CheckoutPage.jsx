@@ -195,10 +195,10 @@ const CheckoutPage = () => {
     if (district) {
       const districtLower = district.toLowerCase()
       const isDhaka = districtLower === "dhaka"
-      return isDhaka ? 60 : 100 // 60 for Dhaka, 100 for outside Dhaka
+      return isDhaka ? 60 : 120 // 60 for Dhaka, 100 for outside Dhaka
     }
 
-    return 100 // Default to outside Dhaka
+    return 120 // Default to outside Dhaka
   }
 
   const subtotal = calculateSubtotal()

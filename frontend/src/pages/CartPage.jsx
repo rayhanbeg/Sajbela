@@ -69,7 +69,7 @@ const CartPage = () => {
   const calculateShippingCost = (subtotal, address) => {
     if (subtotal >= 2000) return 0
     if (address?.district?.toLowerCase() === "dhaka") return 60
-    return 100
+    return 120
   }
 
   const getShippingLocation = (address) => {
@@ -311,7 +311,7 @@ const CartPage = () => {
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Dhaka: ৳60 | Outside Dhaka: ৳100 | Free shipping on orders ৳2000+
+                    Dhaka: ৳60 | Outside Dhaka: ৳120 | Free shipping on orders ৳2000+
                   </p>
                 </div>
               )}
@@ -331,7 +331,7 @@ const CartPage = () => {
                   <p className="text-xs text-gray-500 mt-1">
                     {userAddress?.district?.toLowerCase() === "dhaka"
                       ? "Shipping (Inside Dhaka): ৳60"
-                      : "Shipping (Outside Dhaka): ৳100"}
+                      : "Shipping (Outside Dhaka): ৳120"}
                   </p>
                 )}
                 <div className="border-t pt-2">
