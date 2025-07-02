@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { Link, useNavigate } from "react-router-dom"
@@ -15,7 +17,7 @@ const AdminProducts = () => {
   const [sortBy, setSortBy] = useState("createdAt")
   const [currentPage, setCurrentPage] = useState(1)
   const [filteredProducts, setFilteredProducts] = useState([])
-  const itemsPerPage = 10
+  const itemsPerPage = 20
 
   useEffect(() => {
     if (!isAuthenticated || user?.role !== "admin") {
@@ -23,7 +25,8 @@ const AdminProducts = () => {
       return
     }
 
-    dispatch(fetchProducts({}))
+    // Fetch all products for admin - set a high limit to get all products
+    dispatch(fetchProducts({ limit: 1000, page: 1 }))
   }, [dispatch, isAuthenticated, user, navigate])
 
   useEffect(() => {
@@ -64,7 +67,8 @@ const AdminProducts = () => {
     if (window.confirm("Are you sure you want to delete this product?")) {
       try {
         await dispatch(deleteProduct(productId)).unwrap()
-        dispatch(fetchProducts({}))
+        // Refresh products after deletion
+        dispatch(fetchProducts({ limit: 1000, page: 1 }))
       } catch (error) {
         console.error("Error deleting product:", error)
         alert("Failed to delete product")
@@ -125,6 +129,19 @@ const AdminProducts = () => {
   const endIndex = startIndex + itemsPerPage
   const currentProducts = filteredProducts.slice(startIndex, endIndex)
 
+  // Get category counts for display
+  const getCategoryCounts = () => {
+    const counts = {
+      all: products.length,
+      bangles: products.filter((p) => p.category?.toLowerCase() === "bangles").length,
+      earrings: products.filter((p) => p.category?.toLowerCase() === "earrings").length,
+      cosmetics: products.filter((p) => p.category?.toLowerCase() === "cosmetics").length,
+    }
+    return counts
+  }
+
+  const categoryCounts = getCategoryCounts()
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -133,6 +150,15 @@ const AdminProducts = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Product Management</h1>
             <p className="mt-2 text-gray-600">Manage your product inventory and listings</p>
+            <div className="mt-2 flex items-center space-x-4 text-sm text-gray-500">
+              <span>
+                Total Products: <span className="font-semibold text-gray-900">{products.length}</span>
+              </span>
+              <span>•</span>
+              <span>
+                Showing: <span className="font-semibold text-gray-900">{filteredProducts.length}</span>
+              </span>
+            </div>
           </div>
           <Link
             to="/admin/products/new"
@@ -141,6 +167,54 @@ const AdminProducts = () => {
             <Plus className="h-5 w-5 mr-2" />
             Add New Product
           </Link>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="flex items-center">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Package className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Total Products</p>
+                <p className="text-2xl font-bold text-gray-900">{categoryCounts.all}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="flex items-center">
+              <div className="p-2 bg-pink-100 rounded-lg">
+                <Package className="h-6 w-6 text-pink-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Bangles</p>
+                <p className="text-2xl font-bold text-gray-900">{categoryCounts.bangles}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="flex items-center">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Package className="h-6 w-6 text-purple-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Earrings</p>
+                <p className="text-2xl font-bold text-gray-900">{categoryCounts.earrings}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="flex items-center">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <Package className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Cosmetics</p>
+                <p className="text-2xl font-bold text-gray-900">{categoryCounts.cosmetics}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Filters */}
@@ -172,10 +246,10 @@ const AdminProducts = () => {
                 onChange={(e) => setCategoryFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
               >
-                <option value="all">All Categories</option>
-                <option value="bangles">Bangles</option>
-                <option value="earrings">Earrings</option>
-                <option value="cosmetics">Cosmetics</option>
+                <option value="all">All Categories ({categoryCounts.all})</option>
+                <option value="bangles">Bangles ({categoryCounts.bangles})</option>
+                <option value="earrings">Earrings ({categoryCounts.earrings})</option>
+                <option value="cosmetics">Cosmetics ({categoryCounts.cosmetics})</option>
               </select>
             </div>
 
@@ -193,12 +267,16 @@ const AdminProducts = () => {
             </div>
 
             <div className="flex items-end">
-              <div className="text-sm text-gray-600">
-                <p className="font-medium">Total Products: {filteredProducts.length}</p>
-                <p>
-                  Showing {currentProducts.length} of {filteredProducts.length}
-                </p>
-              </div>
+              <button
+                onClick={() => {
+                  setSearchTerm("")
+                  setCategoryFilter("all")
+                  setSortBy("createdAt")
+                }}
+                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Clear Filters
+              </button>
             </div>
           </div>
         </div>
@@ -236,7 +314,10 @@ const AdminProducts = () => {
                 {productsLoading ? (
                   <tr>
                     <td colSpan="7" className="px-6 py-4 text-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600 mx-auto"></div>
+                      <div className="flex flex-col items-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600 mb-4"></div>
+                        <p className="text-gray-500">Loading products...</p>
+                      </div>
                     </td>
                   </tr>
                 ) : currentProducts.length === 0 ? (
@@ -245,7 +326,20 @@ const AdminProducts = () => {
                       <div className="flex flex-col items-center py-8">
                         <Package className="h-12 w-12 text-gray-400 mb-4" />
                         <p className="text-gray-500 text-lg">No products found</p>
-                        <p className="text-gray-400 text-sm">Try adjusting your search or filters</p>
+                        <p className="text-gray-400 text-sm">
+                          {searchTerm || categoryFilter !== "all"
+                            ? "Try adjusting your search or filters"
+                            : "Start by adding your first product"}
+                        </p>
+                        {!searchTerm && categoryFilter === "all" && (
+                          <Link
+                            to="/admin/products/new"
+                            className="mt-4 inline-flex items-center px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Product
+                          </Link>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -396,8 +490,17 @@ const AdminProducts = () => {
                     >
                       Previous
                     </button>
-                    {[...Array(totalPages)].map((_, index) => {
-                      const page = index + 1
+                    {[...Array(Math.min(totalPages, 10))].map((_, index) => {
+                      let page
+                      if (totalPages <= 10) {
+                        page = index + 1
+                      } else {
+                        const start = Math.max(1, currentPage - 5)
+                        const end = Math.min(totalPages, start + 9)
+                        page = start + index
+                        if (page > end) return null
+                      }
+
                       return (
                         <button
                           key={page}
