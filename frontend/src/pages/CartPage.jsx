@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { useNavigate, Link } from "react-router-dom"
@@ -42,13 +41,6 @@ const CartPage = () => {
       loadCartData()
     }
   }, [isAuthenticated, initialLoadComplete, dispatch])
-
-  // Redirect if cart is empty after load
-  useEffect(() => {
-    if (initialLoadComplete && (!items || items.length === 0)) {
-      navigate("/cart-empty")
-    }
-  }, [items, initialLoadComplete, navigate])
 
   const fetchUserAddress = async () => {
     try {
@@ -209,7 +201,8 @@ const CartPage = () => {
     )
   }
 
-  if (!items || items.length === 0) {
+  // Show empty cart message when cart is empty and loading is complete
+  if (initialLoadComplete && (!items || items.length === 0)) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -250,7 +243,7 @@ const CartPage = () => {
               <div key={item._id} className="bg-white p-6 rounded-lg shadow-md">
                 <div className="flex items-center space-x-4">
                   <img
-                    src={getImageUrl(item)}
+                    src={getImageUrl(item) || "/placeholder.svg"}
                     alt={getProductName(item)}
                     className="w-20 h-20 object-cover rounded-lg"
                     onError={(e) => {
@@ -281,9 +274,7 @@ const CartPage = () => {
                     </button>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900">
-                      {formatPrice(getProductPrice(item) * item.quantity)}
-                    </p>
+                    <p className="font-semibold text-gray-900">{formatPrice(getProductPrice(item) * item.quantity)}</p>
                     <button
                       onClick={() => handleRemoveItem(item)}
                       className="text-red-600 hover:text-red-700 mt-1 disabled:opacity-50"

@@ -1,48 +1,21 @@
 import { useState, useEffect } from "react"
 import { useSelector, useDispatch } from "react-redux"
-import { useNavigate, useParams } from "react-router-dom"
-import { Upload, X, Save, ArrowLeft, Plus, Minus } from "lucide-react"
-import { createProduct, updateProduct, fetchProductById, clearCurrentProduct } from "../../lib/store/productSlice"
-import { uploadAPI } from "../../lib/api"
+import { Link, useNavigate } from "react-router-dom"
+import { Search, Plus, Eye, Edit, Trash2, Filter, Package, Star, Sparkles, Gift } from "lucide-react"
+import { fetchProducts, deleteProduct } from "../../lib/store/productSlice"
 
-const AdminProductForm = () => {
-  const { id } = useParams()
-  const navigate = useNavigate()
+const AdminProducts = () => {
   const dispatch = useDispatch()
+  const navigate = useNavigate()
   const { user, isAuthenticated } = useSelector((state) => state.auth)
-  const { currentProduct, loading } = useSelector((state) => state.products)
+  const { products, loading: productsLoading } = useSelector((state) => state.products)
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    price: "",
-    originalPrice: "",
-    category: "bangles",
-    subcategory: "",
-    stock: "",
-    tags: "",
-    specifications: {
-      material: "",
-      color: "",
-      size: "",
-      weight: "",
-    },
-    sizes: [],
-    featured: false,
-    isNewArrival: false,
-    isCombo: false,
-  })
-
-  const [images, setImages] = useState([])
-  const [uploading, setUploading] = useState(false)
-  const [errors, setErrors] = useState({})
-
-  const sizeOptions = [
-    { size: "S", measurement: "2.4/24" },
-    { size: "M", measurement: "2.6/26" },
-    { size: "L", measurement: "2.8/28" },
-    { size: "XL", measurement: "2.10/30" },
-  ]
+  const [searchTerm, setSearchTerm] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [sortBy, setSortBy] = useState("createdAt")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [filteredProducts, setFilteredProducts] = useState([])
+  const itemsPerPage = 10
 
   useEffect(() => {
     if (!isAuthenticated || user?.role !== "admin") {
@@ -50,614 +23,411 @@ const AdminProductForm = () => {
       return
     }
 
-    if (id) {
-      dispatch(fetchProductById(id))
-    }
-
-    return () => {
-      dispatch(clearCurrentProduct())
-    }
-  }, [dispatch, id, isAuthenticated, user, navigate])
+    dispatch(fetchProducts({}))
+  }, [dispatch, isAuthenticated, user, navigate])
 
   useEffect(() => {
-    if (currentProduct && id) {
-      setFormData({
-        name: currentProduct.name || "",
-        description: currentProduct.description || "",
-        price: currentProduct.price || "",
-        originalPrice: currentProduct.originalPrice || "",
-        category: currentProduct.category || "bangles",
-        subcategory: currentProduct.subcategory || "",
-        stock: currentProduct.stock || "",
-        tags: currentProduct.tags?.join(", ") || "",
-        specifications: {
-          material: currentProduct.specifications?.material || "",
-          color: currentProduct.specifications?.color || "",
-          size: currentProduct.specifications?.size || "",
-          weight: currentProduct.specifications?.weight || "",
-        },
-        sizes: currentProduct.sizes || [],
-        featured: currentProduct.featured || false,
-        isNewArrival: currentProduct.isNewArrival || false,
-        isCombo: currentProduct.isCombo || false,
-      })
-      setImages(currentProduct.images || [])
+    let filtered = [...products]
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (product) =>
+          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          product.description?.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
     }
-  }, [currentProduct, id])
 
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target
+    // Category filter
+    if (categoryFilter !== "all") {
+      filtered = filtered.filter((product) => product.category.toLowerCase() === categoryFilter.toLowerCase())
+    }
 
-    if (name.startsWith("specifications.")) {
-      const specField = name.split(".")[1]
-      setFormData((prev) => ({
-        ...prev,
-        specifications: {
-          ...prev.specifications,
-          [specField]: value,
-        },
-      }))
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: type === "checkbox" ? checked : value,
-      }))
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          return a.name.localeCompare(b.name)
+        case "price":
+          return a.price - b.price
+        case "createdAt":
+        default:
+          return new Date(b.createdAt) - new Date(a.createdAt)
+      }
+    })
+
+    setFilteredProducts(filtered)
+    setCurrentPage(1)
+  }, [products, searchTerm, categoryFilter, sortBy])
+
+  const handleDeleteProduct = async (productId) => {
+    if (window.confirm("Are you sure you want to delete this product?")) {
+      try {
+        await dispatch(deleteProduct(productId)).unwrap()
+        dispatch(fetchProducts({}))
+      } catch (error) {
+        console.error("Error deleting product:", error)
+        alert("Failed to delete product")
+      }
     }
   }
 
-  const handleSizeChange = (index, field, value) => {
-    const updatedSizes = [...formData.sizes]
+  const getStockStatus = (product) => {
+    let totalStock = 0
 
-    if (field === "size") {
-      // When size changes, also update the measurement
-      const selectedOption = sizeOptions.find((opt) => opt.size === value)
-      updatedSizes[index] = {
-        ...updatedSizes[index],
-        size: value,
-        measurement: selectedOption?.measurement || "",
+    // Check if product is bangles and has sizes
+    if (product.category?.toLowerCase() === "bangles" && product.sizes) {
+      // If sizes is an object with size keys
+      if (typeof product.sizes === "object" && !Array.isArray(product.sizes)) {
+        Object.values(product.sizes).forEach((sizeData) => {
+          if (sizeData && typeof sizeData === "object" && sizeData.stock) {
+            totalStock += Number.parseInt(sizeData.stock) || 0
+          }
+        })
+      }
+      // If sizes is an array
+      else if (Array.isArray(product.sizes)) {
+        product.sizes.forEach((sizeData) => {
+          if (sizeData && sizeData.stock) {
+            totalStock += Number.parseInt(sizeData.stock) || 0
+          }
+        })
       }
     } else {
-      updatedSizes[index] = {
-        ...updatedSizes[index],
-        [field]: field === "stock" ? Number(value) : field === "available" ? value : value,
-      }
+      // For regular products, use the stock field
+      totalStock = Number.parseInt(product.stock) || 0
     }
 
-    setFormData((prev) => ({
-      ...prev,
-      sizes: updatedSizes,
-    }))
+    if (totalStock === 0) return { status: "Out of Stock", color: "bg-red-100 text-red-800", stock: totalStock }
+    if (totalStock <= 5) return { status: "Low Stock", color: "bg-yellow-100 text-yellow-800", stock: totalStock }
+    return { status: "In Stock", color: "bg-green-100 text-green-800", stock: totalStock }
   }
 
-  const addSize = () => {
-    // Find the next available size that hasn't been added yet
-    const usedSizes = formData.sizes.map((s) => s.size)
-    const availableSize = sizeOptions.find((option) => !usedSizes.includes(option.size))
+  const formatSizeDisplay = (product) => {
+    if (product.category?.toLowerCase() !== "bangles" || !product.sizes) return "N/A"
 
-    const newSize = availableSize || sizeOptions[0] // fallback to S if all sizes are used
+    let availableSizes = 0
 
-    setFormData((prev) => ({
-      ...prev,
-      sizes: [
-        ...prev.sizes,
-        {
-          size: newSize.size,
-          measurement: newSize.measurement,
-          stock: 0,
-          available: true,
-        },
-      ],
-    }))
-  }
-
-  const removeSize = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      sizes: prev.sizes.filter((_, i) => i !== index),
-    }))
-  }
-
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files)
-    if (files.length === 0) return
-
-    setUploading(true)
-    try {
-      const uploadPromises = files.map((file) => uploadAPI.single(file))
-      const responses = await Promise.all(uploadPromises)
-
-      const newImages = responses.map((response) => ({
-        url: response.data.imageUrl,
-        publicId: response.data.publicId,
-        alt: formData.name,
-      }))
-
-      setImages((prev) => [...prev, ...newImages])
-    } catch (error) {
-      console.error("Upload error:", error)
-
-      if (error.response?.status === 500) {
-        alert("Server error: Please check if Cloudinary is properly configured in the backend.")
-      } else if (error.response?.data?.message) {
-        alert(`Upload failed: ${error.response.data.message}`)
-      } else {
-        alert("Failed to upload images. Please try again.")
-      }
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const removeImage = async (index) => {
-    const image = images[index]
-    try {
-      if (image.publicId) {
-        await uploadAPI.delete(image.publicId)
-      }
-      setImages((prev) => prev.filter((_, i) => i !== index))
-    } catch (error) {
-      console.error("Delete image error:", error)
-    }
-  }
-
-  const validateForm = () => {
-    const newErrors = {}
-
-    if (!formData.name.trim()) newErrors.name = "Product name is required"
-    if (!formData.description.trim()) newErrors.description = "Description is required"
-    if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required"
-    if (formData.category !== "bangles" && (!formData.stock || formData.stock < 0))
-      newErrors.stock = "Valid stock quantity is required"
-    if (images.length === 0) newErrors.images = "At least one image is required"
-
-    // Validate sizes for bangles
-    if (formData.category === "bangles" && formData.sizes.length === 0) {
-      newErrors.sizes = "At least one size is required for bangles"
+    if (typeof product.sizes === "object" && !Array.isArray(product.sizes)) {
+      availableSizes = Object.keys(product.sizes).filter(
+        (size) => product.sizes[size] && product.sizes[size].stock > 0,
+      ).length
+    } else if (Array.isArray(product.sizes)) {
+      availableSizes = product.sizes.filter((sizeData) => sizeData && sizeData.stock > 0).length
     }
 
-    // Check for duplicate sizes
-    if (formData.category === "bangles" && formData.sizes.length > 0) {
-      const sizeValues = formData.sizes.map((s) => s.size)
-      const duplicates = sizeValues.filter((size, index) => sizeValues.indexOf(size) !== index)
-      if (duplicates.length > 0) {
-        newErrors.sizes = "Duplicate sizes are not allowed"
-      }
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    return availableSizes > 0 ? `${availableSizes} sizes` : "No sizes"
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    if (!validateForm()) return
-
-    // Log the sizes data to debug
-    console.log("Submitting sizes:", formData.sizes)
-
-    const productData = {
-      ...formData,
-      price: Number(formData.price),
-      originalPrice: formData.originalPrice ? Number(formData.originalPrice) : undefined,
-      stock: formData.category === "bangles" ? 0 : Number(formData.stock),
-      tags: formData.tags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter((tag) => tag),
-      images,
-      // Ensure sizes are properly formatted
-      sizes: formData.sizes.map((size) => ({
-        size: size.size,
-        measurement: size.measurement,
-        stock: Number(size.stock) || 0,
-        available: Boolean(size.available),
-      })),
-      // Always set isActive to true - products are active by default
-      isActive: true,
-    }
-
-    console.log("Final product data:", productData)
-
-    try {
-      if (id) {
-        await dispatch(updateProduct({ id, productData })).unwrap()
-        alert("Product updated successfully!")
-      } else {
-        await dispatch(createProduct(productData)).unwrap()
-        alert("Product created successfully!")
-      }
-      navigate("/admin/products")
-    } catch (error) {
-      console.error("Save error:", error)
-      alert("Failed to save product")
-    }
-  }
+  // Pagination
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentProducts = filteredProducts.slice(startIndex, endIndex)
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 lg:px-8 py-8">
-        <div className="flex items-center mb-8">
-          <button onClick={() => navigate("/admin/products")} className="mr-4 p-2 text-gray-600 hover:text-gray-900">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900">{id ? "Edit Product" : "Add New Product"}</h1>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Product Management</h1>
+            <p className="mt-2 text-gray-600">Manage your product inventory and listings</p>
+          </div>
+          <Link
+            to="/admin/products/new"
+            className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors"
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            Add New Product
+          </Link>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Basic Information */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Information</h2>
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="flex items-center mb-4">
+            <Filter className="h-5 w-5 text-gray-500 mr-2" />
+            <h2 className="text-lg font-semibold text-gray-900">Filters & Search</h2>
+          </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                      errors.name ? "border-red-500" : "border-gray-300"
-                    }`}
-                    placeholder="Enter product name"
-                  />
-                  {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    rows={4}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                      errors.description ? "border-red-500" : "border-gray-300"
-                    }`}
-                    placeholder="Enter product description"
-                  />
-                  {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
-                    <input
-                      type="number"
-                      name="price"
-                      value={formData.price}
-                      onChange={handleInputChange}
-                      min="0"
-                      step="0.01"
-                      className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                        errors.price ? "border-red-500" : "border-gray-300"
-                      }`}
-                      placeholder="0.00"
-                    />
-                    {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Original Price</label>
-                    <input
-                      type="number"
-                      name="originalPrice"
-                      value={formData.originalPrice}
-                      onChange={handleInputChange}
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-                    <select
-                      name="category"
-                      value={formData.category}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                    >
-                      <option value="bangles">Bangles</option>
-                      <option value="earrings">Earrings</option>
-                      <option value="cosmetics">Cosmetics</option>
-                    </select>
-                  </div>
-
-                  {formData.category !== "bangles" && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Stock Quantity *</label>
-                      <input
-                        type="number"
-                        name="stock"
-                        value={formData.stock}
-                        onChange={handleInputChange}
-                        min="0"
-                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                          errors.stock ? "border-red-500" : "border-gray-300"
-                        }`}
-                        placeholder="0"
-                      />
-                      {errors.stock && <p className="text-red-500 text-sm mt-1">{errors.stock}</p>}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-                  <input
-                    type="text"
-                    name="tags"
-                    value={formData.tags}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                    placeholder="Enter tags separated by commas"
-                  />
-                </div>
-
-                <div className="flex items-center space-x-6">
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      name="featured"
-                      checked={formData.featured}
-                      onChange={handleInputChange}
-                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Featured Product</span>
-                  </label>
-
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      name="isNewArrival"
-                      checked={formData.isNewArrival}
-                      onChange={handleInputChange}
-                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">New Arrival</span>
-                  </label>
-
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      name="isCombo"
-                      checked={formData.isCombo}
-                      onChange={handleInputChange}
-                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Combo Product</span>
-                  </label>
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Search Products</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by name or description..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+                />
+                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               </div>
             </div>
 
-            {/* Right Column */}
-            <div className="space-y-6">
-              {/* Specifications */}
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Specifications</h2>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+              >
+                <option value="all">All Categories</option>
+                <option value="bangles">Bangles</option>
+                <option value="earrings">Earrings</option>
+                <option value="cosmetics">Cosmetics</option>
+              </select>
+            </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Material</label>
-                    <input
-                      type="text"
-                      name="specifications.material"
-                      value={formData.specifications.material}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="e.g., Gold plated"
-                    />
-                  </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+              >
+                <option value="createdAt">Newest First</option>
+                <option value="name">Name A-Z</option>
+                <option value="price">Price Low to High</option>
+              </select>
+            </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
-                    <input
-                      type="text"
-                      name="specifications.color"
-                      value={formData.specifications.color}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="e.g., Gold"
-                    />
-                  </div>
-
-                  {formData.category !== "bangles" && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
-                        <input
-                          type="text"
-                          name="specifications.size"
-                          value={formData.specifications.size}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                          placeholder="e.g., Medium"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Weight</label>
-                    <input
-                      type="text"
-                      name="specifications.weight"
-                      value={formData.specifications.weight}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="e.g., 50g"
-                    />
-                  </div>
-                </div>
+            <div className="flex items-end">
+              <div className="text-sm text-gray-600">
+                <p className="font-medium">Total Products: {filteredProducts.length}</p>
+                <p>
+                  Showing {currentProducts.length} of {filteredProducts.length}
+                </p>
               </div>
+            </div>
+          </div>
+        </div>
 
-              {/* Size Management for Bangles */}
-              {formData.category === "bangles" && (
-                <div className="bg-white rounded-lg shadow-md p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-gray-900">Available Sizes *</h2>
+        {/* Products Table */}
+        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Product
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Category
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Price
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Stock
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {productsLoading ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-4 text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600 mx-auto"></div>
+                    </td>
+                  </tr>
+                ) : currentProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-4 text-center">
+                      <div className="flex flex-col items-center py-8">
+                        <Package className="h-12 w-12 text-gray-400 mb-4" />
+                        <p className="text-gray-500 text-lg">No products found</p>
+                        <p className="text-gray-400 text-sm">Try adjusting your search or filters</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  currentProducts.map((product) => {
+                    const stockInfo = getStockStatus(product)
+                    return (
+                      <tr key={product._id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="relative">
+                              <img
+                                src={product.images?.[0]?.url || "/placeholder.svg"}
+                                alt={product.name}
+                                className="h-16 w-16 object-cover rounded-lg"
+                              />
+                              {product.isFeatured && (
+                                <div className="absolute -top-1 -right-1">
+                                  <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="ml-4">
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-medium text-gray-900">{product.name}</h4>
+                                {product.isNew && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                    <Sparkles className="h-3 w-3 mr-1" />
+                                    New
+                                  </span>
+                                )}
+                                {product.isCombo && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                    <Gift className="h-3 w-3 mr-1" />
+                                    Combo
+                                  </span>
+                                )}
+                                {product.isFeatured && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    <Star className="h-3 w-3 mr-1" />
+                                    Featured
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-500 mt-1 max-w-xs truncate">{product.description}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 capitalize">
+                            {product.category}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm">
+                            <span className="font-medium text-gray-900">৳{product.price}</span>
+                            {product.originalPrice && product.originalPrice > product.price && (
+                              <span className="ml-2 text-gray-500 line-through">৳{product.originalPrice}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {product.category?.toLowerCase() === "bangles" ? (
+                            <div>
+                              <div className="font-medium">{stockInfo.stock} total</div>
+                              <div className="text-xs text-gray-500">{formatSizeDisplay(product)}</div>
+                            </div>
+                          ) : (
+                            <div className="font-medium">{stockInfo.stock}</div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${stockInfo.color}`}
+                          >
+                            {stockInfo.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(product.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex items-center space-x-2">
+                            <Link
+                              to={`/products/${product._id}`}
+                              className="text-blue-600 hover:text-blue-900 transition-colors"
+                              title="View Product"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Link>
+                            <Link
+                              to={`/admin/products/${product._id}/edit`}
+                              className="text-green-600 hover:text-green-900 transition-colors"
+                              title="Edit Product"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Link>
+                            <button
+                              onClick={() => handleDeleteProduct(product._id)}
+                              className="text-red-600 hover:text-red-900 transition-colors"
+                              title="Delete Product"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
+                    <span className="font-medium">{Math.min(endIndex, filteredProducts.length)}</span> of{" "}
+                    <span className="font-medium">{filteredProducts.length}</span> results
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
                     <button
-                      type="button"
-                      onClick={addSize}
-                      className="flex items-center px-3 py-1 bg-pink-600 text-white rounded hover:bg-pink-700"
-                      disabled={formData.sizes.length >= 4} // Limit to 4 sizes max
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Size
+                      Previous
                     </button>
-                  </div>
-
-                  {errors.sizes && <p className="text-red-500 text-sm mb-3">{errors.sizes}</p>}
-
-                  <div className="space-y-3">
-                    {formData.sizes.map((size, index) => (
-                      <div
-                        key={`size-${index}-${size.size}`}
-                        className="grid grid-cols-5 gap-3 items-center p-3 border rounded-lg"
-                      >
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Size</label>
-                          <select
-                            value={size.size}
-                            onChange={(e) => handleSizeChange(index, "size", e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-pink-500"
-                          >
-                            {sizeOptions.map((option) => (
-                              <option key={option.size} value={option.size}>
-                                {option.size}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Measurement</label>
-                          <input
-                            type="text"
-                            value={size.measurement}
-                            onChange={(e) => handleSizeChange(index, "measurement", e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-pink-500"
-                            placeholder="2.4/24"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Stock</label>
-                          <input
-                            type="number"
-                            value={size.stock}
-                            onChange={(e) => handleSizeChange(index, "stock", e.target.value)}
-                            min="0"
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-pink-500"
-                          />
-                        </div>
-
-                        <div className="text-center">
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Available</label>
-                          <input
-                            type="checkbox"
-                            checked={size.available}
-                            onChange={(e) => handleSizeChange(index, "available", e.target.checked)}
-                            className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                          />
-                        </div>
-
-                        <div className="text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeSize(index)}
-                            className="p-1 text-red-600 hover:text-red-800"
-                            title="Remove size"
-                          >
-                            <Minus className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {formData.sizes.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <p>No sizes added yet. Click "Add Size" to add available sizes.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Images */}
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Product Images *</h2>
-
-                <div className="space-y-4">
-                  <div>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      id="image-upload"
-                      disabled={uploading}
-                    />
-                    <label
-                      htmlFor="image-upload"
-                      className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 ${
-                        uploading ? "border-gray-300 cursor-not-allowed" : "border-gray-300 hover:border-pink-500"
-                      }`}
+                    {[...Array(totalPages)].map((_, index) => {
+                      const page = index + 1
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                            currentPage === page
+                              ? "z-10 bg-pink-50 border-pink-500 text-pink-600"
+                              : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      )
+                    })}
+                    <button
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-600">{uploading ? "Uploading..." : "Click to upload images"}</p>
-                    </label>
-                    {errors.images && <p className="text-red-500 text-sm mt-1">{errors.images}</p>}
-                  </div>
-
-                  {images.length > 0 && (
-                    <div className="grid grid-cols-2 gap-4">
-                      {images.map((image, index) => (
-                        <div key={index} className="relative">
-                          <img
-                            src={image.url || "/placeholder.svg"}
-                            alt={`Product ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeImage(index)}
-                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                      Next
+                    </button>
+                  </nav>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Submit Button */}
-          <div className="mt-8 flex justify-end">
-            <button
-              type="submit"
-              disabled={loading || uploading}
-              className="flex items-center px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save className="h-5 w-5 mr-2" />
-              {loading ? "Saving..." : id ? "Update Product" : "Create Product"}
-            </button>
-          </div>
-        </form>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-export default AdminProductForm
+export default AdminProducts

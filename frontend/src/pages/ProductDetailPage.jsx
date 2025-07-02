@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { Star, ShoppingCart, Heart, ChevronDown } from "lucide-react"
@@ -43,6 +42,68 @@ const ProductDetailPage = () => {
     }
   }, [product])
 
+  useEffect(() => {
+    // Check if user just logged in and has pending selections
+    if (isAuthenticated && product) {
+      const pendingSelection = localStorage.getItem("pendingProductSelection")
+      if (pendingSelection) {
+        try {
+          const selections = JSON.parse(pendingSelection)
+
+          // Only restore if it's for the current product
+          if (selections.productId === product._id) {
+            // Restore selections
+            if (selections.selectedSize) {
+              setSelectedSize(selections.selectedSize)
+            }
+            if (selections.selectedColor) {
+              setSelectedColor(selections.selectedColor)
+            }
+            if (selections.quantity) {
+              setQuantity(selections.quantity)
+            }
+
+            // Execute the pending action after a short delay to ensure state is updated
+            setTimeout(async () => {
+              try {
+                if (selections.action === "addToCart") {
+                  await dispatch(
+                    addToCartAsync({
+                      productId: product._id,
+                      quantity: selections.quantity,
+                      selectedSize: product.category === "bangles" ? selections.selectedSize?.size : undefined,
+                      selectedColor: selections.selectedColor ? selections.selectedColor.name : undefined,
+                    }),
+                  ).unwrap()
+                  alert("Product added to cart successfully!")
+                } else if (selections.action === "buyNow") {
+                  await dispatch(
+                    addToCartAsync({
+                      productId: product._id,
+                      quantity: selections.quantity,
+                      selectedSize: product.category === "bangles" ? selections.selectedSize?.size : undefined,
+                      selectedColor: selections.selectedColor ? selections.selectedColor.name : undefined,
+                    }),
+                  ).unwrap()
+                  navigate("/checkout")
+                }
+              } catch (error) {
+                console.error("Failed to execute pending action:", error)
+                alert(error || "Failed to process your selection")
+              }
+            }, 500)
+          }
+
+          // Clear the pending selection
+          localStorage.removeItem("pendingProductSelection")
+        } catch (error) {
+          console.error("Error restoring pending selection:", error)
+          localStorage.removeItem("pendingProductSelection")
+        }
+      }
+    }
+  }, [isAuthenticated, product, dispatch, navigate])
+
   const handleSizeSelect = (sizeOption) => {
     setSelectedSize(sizeOption)
     setQuantity(1) // Reset quantity when size changes
@@ -60,9 +121,19 @@ const ProductDetailPage = () => {
 
     // Check if user is authenticated
     if (!isAuthenticated) {
-      // Redirect to login with return path
+      // Store current selections before redirecting to login/register
+      const selections = {
+        productId: product._id,
+        selectedSize: selectedSize,
+        selectedColor: selectedColor,
+        quantity: quantity,
+        action: "addToCart",
+      }
+      localStorage.setItem("pendingProductSelection", JSON.stringify(selections))
+
+      // Redirect to register page (which has login option) with return path
       const currentPath = window.location.pathname
-      navigate(`/auth/login?returnTo=${encodeURIComponent(currentPath)}`)
+      navigate(`/auth/register?returnTo=${encodeURIComponent(currentPath)}`)
       return
     }
 
@@ -100,9 +171,19 @@ const ProductDetailPage = () => {
 
     // Check if user is authenticated
     if (!isAuthenticated) {
-      // Redirect to login with return path
+      // Store current selections before redirecting to login/register
+      const selections = {
+        productId: product._id,
+        selectedSize: selectedSize,
+        selectedColor: selectedColor,
+        quantity: quantity,
+        action: "buyNow",
+      }
+      localStorage.setItem("pendingProductSelection", JSON.stringify(selections))
+
+      // Redirect to register page (which has login option) with return path
       const currentPath = window.location.pathname
-      navigate(`/auth/login?returnTo=${encodeURIComponent(currentPath)}`)
+      navigate(`/auth/register?returnTo=${encodeURIComponent(currentPath)}`)
       return
     }
 
@@ -336,12 +417,12 @@ const ProductDetailPage = () => {
                 alt={product.name}
                 className="w-full h-full object-contain"
                 style={{
-                  maxWidth: '100%',
-                  maxHeight: '500px',
-                  width: 'auto',
-                  height: 'auto',
-                  display: 'block',
-                  margin: '0 auto'
+                  maxWidth: "100%",
+                  maxHeight: "500px",
+                  width: "auto",
+                  height: "auto",
+                  display: "block",
+                  margin: "0 auto",
                 }}
                 onError={(e) => {
                   e.target.src = "/placeholder.svg"
@@ -363,12 +444,12 @@ const ProductDetailPage = () => {
                       alt={`${product.name} ${index + 1}`}
                       className="w-full h-full object-contain"
                       style={{
-                        maxWidth: '100%',
-                        maxHeight: '100px',
-                        width: 'auto',
-                        height: 'auto',
-                        display: 'block',
-                        margin: '0 auto'
+                        maxWidth: "100%",
+                        maxHeight: "100px",
+                        width: "auto",
+                        height: "auto",
+                        display: "block",
+                        margin: "0 auto",
                       }}
                       onError={(e) => {
                         e.target.src = "/placeholder.svg"
@@ -403,7 +484,9 @@ const ProductDetailPage = () => {
               <span className="text-2xl md:text-3xl font-bold text-gray-900">{formatPrice(product.price)}</span>
               {product.originalPrice && (
                 <>
-                  <span className="text-lg md:text-xl text-gray-500 line-through">{formatPrice(product.originalPrice)}</span>
+                  <span className="text-lg md:text-xl text-gray-500 line-through">
+                    {formatPrice(product.originalPrice)}
+                  </span>
                   <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-sm font-medium">
                     -{discountPercentage}% OFF
                   </span>

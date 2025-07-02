@@ -1,5 +1,5 @@
-
-import { Truck, Headphones, Award } from "lucide-react"
+import { Truck, Headphones, Award, ShoppingBag } from "lucide-react"
+import { Link } from "react-router-dom"
 import { Swiper, SwiperSlide } from "swiper/react"
 import { Autoplay, Pagination } from "swiper/modules"
 import { useEffect } from "react"
@@ -26,7 +26,6 @@ const HeroSection = () => {
       }
     `
     document.head.appendChild(style)
-
     return () => {
       document.head.removeChild(style)
     }
@@ -107,6 +106,15 @@ const HeroSection = () => {
                 </SwiperSlide>
               ))}
             </Swiper>
+
+            {/* Shop Now Button */}
+            <Link
+              to="/products"
+              className="absolute top-4 right-4 z-10 bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-lg shadow-lg transition-all duration-300 hover:scale-105 flex items-center gap-2"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              <span className="hidden sm:inline">Shop Now</span>
+            </Link>
           </div>
 
           {/* Right Side Offers */}

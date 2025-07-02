@@ -16,15 +16,34 @@ const LoginPage = () => {
   })
   const [showPassword, setShowPassword] = useState(false)
 
-  // Get the return path from URL params or default to account
-  const returnPath = new URLSearchParams(location.search).get("returnTo") || "/account"
+  // Get return path from URL parameters
+  const searchParams = new URLSearchParams(location.search)
+  const returnTo = searchParams.get("returnTo")
 
   useEffect(() => {
     if (isAuthenticated) {
-      // Redirect to the original path after successful login
-      navigate(returnPath, { replace: true })
+      // Check if there's a pending product selection to handle
+      const pendingSelection = localStorage.getItem("pendingProductSelection")
+
+      if (pendingSelection && returnTo) {
+        try {
+          const selections = JSON.parse(pendingSelection)
+
+          // Redirect back to product page - the product page will handle the pending action
+          const redirectPath = decodeURIComponent(returnTo)
+          navigate(redirectPath)
+          return
+        } catch (error) {
+          console.error("Error parsing pending selection:", error)
+          localStorage.removeItem("pendingProductSelection")
+        }
+      }
+
+      // Normal redirect flow
+      const redirectPath = returnTo ? decodeURIComponent(returnTo) : "/account"
+      navigate(redirectPath)
     }
-  }, [isAuthenticated, navigate, returnPath])
+  }, [isAuthenticated, navigate, returnTo])
 
   useEffect(() => {
     return () => {
@@ -53,8 +72,10 @@ const LoginPage = () => {
               <div className="text-center mb-8">
                 <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
                 <p className="text-gray-600 mt-2">Sign in to your account</p>
-                {returnPath !== "/account" && (
-                  <p className="text-sm text-pink-600 mt-2">Please login to continue shopping</p>
+                {returnTo && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">🛍️ Please sign in to continue with your purchase</p>
+                  </div>
                 )}
               </div>
 
@@ -101,13 +122,13 @@ const LoginPage = () => {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <label className="flex items-center">
+                  <div className="flex items-center">
                     <input
                       type="checkbox"
                       className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
                     />
                     <span className="ml-2 text-sm text-gray-600">Remember me</span>
-                  </label>
+                  </div>
                   <Link to="/auth/forgot-password" className="text-sm text-pink-600 hover:text-pink-700">
                     Forgot password?
                   </Link>
@@ -118,7 +139,7 @@ const LoginPage = () => {
                   disabled={loading}
                   className="w-full bg-pink-600 text-white py-2 px-4 rounded-lg hover:bg-pink-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? "Signing In..." : "Sign In"}
+                  {loading ? "Signing in..." : "Sign In"}
                 </button>
               </form>
 
@@ -126,10 +147,10 @@ const LoginPage = () => {
                 <p className="text-sm text-gray-600">
                   Don't have an account?{" "}
                   <Link
-                    to={`/auth/register${returnPath !== "/account" ? `?returnTo=${encodeURIComponent(returnPath)}` : ""}`}
+                    to={`/auth/register${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`}
                     className="text-pink-600 hover:text-pink-700 font-medium"
                   >
-                    Sign up
+                    Create one
                   </Link>
                 </p>
               </div>

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react"
 import { ordersAPI } from "../../lib/api"
 import { formatCurrency, formatDate } from "../../lib/utils"
@@ -116,10 +115,19 @@ const AdminOrders = () => {
     return sizeFormats[size] || size
   }
 
+  const clearFilters = () => {
+    setFilters({
+      status: "all",
+      startDate: "",
+      endDate: "",
+    })
+    setCurrentPage(1)
+  }
+
   if (loading && orders.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Order Management</h1>
             <p className="mt-2 text-gray-600">Manage and track all customer orders</p>
@@ -171,7 +179,7 @@ const AdminOrders = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Order Management</h1>
           <p className="mt-2 text-gray-600">Manage and track all customer orders</p>
@@ -181,9 +189,14 @@ const AdminOrders = () => {
 
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-          <div className="flex items-center mb-4">
-            <Filter className="h-5 w-5 text-gray-500 mr-2" />
-            <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <Filter className="h-5 w-5 text-gray-500 mr-2" />
+              <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
+            </div>
+            <button onClick={clearFilters} className="text-sm text-pink-600 hover:text-pink-700 font-medium">
+              Clear Filters
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -228,7 +241,30 @@ const AdminOrders = () => {
         {/* Orders Summary */}
         <div className="bg-white p-6 rounded-lg shadow-md mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-2">Orders Summary</h2>
-          <p className="text-gray-600">Total Orders: {totalOrders}</p>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">{totalOrders}</p>
+              <p className="text-sm text-gray-600">Total Orders</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-yellow-600">
+                {orders.filter((order) => order.orderStatus === "pending").length}
+              </p>
+              <p className="text-sm text-gray-600">Pending Orders</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-blue-600">
+                {orders.filter((order) => order.orderStatus === "processing").length}
+              </p>
+              <p className="text-sm text-gray-600">Processing Orders</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600">
+                {orders.filter((order) => order.orderStatus === "delivered").length}
+              </p>
+              <p className="text-sm text-gray-600">Delivered Orders</p>
+            </div>
+          </div>
         </div>
 
         {/* Orders Table */}
@@ -275,9 +311,7 @@ const AdminOrders = () => {
                             {order.shippingAddress.city &&
                             (order.shippingAddress.postalCode || order.shippingAddress.postalCode)
                               ? `${order.shippingAddress.city}, ${order.shippingAddress.postalCode}`
-                              : order.shippingAddress.city ||
-                                order.shippingAddress.postalCode ||
-                                "Address incomplete"}
+                              : order.shippingAddress.city || order.shippingAddress.postalCode || "Address incomplete"}
                           </div>
                         )}
                       </div>

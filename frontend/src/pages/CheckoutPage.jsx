@@ -12,11 +12,87 @@ const CheckoutPage = () => {
   const { items, totalAmount, loading: cartLoading } = useSelector((state) => state.cart)
   const { isAuthenticated } = useSelector((state) => state.auth)
 
-  const [addresses, setAddresses] = useState([])
-  const [selectedAddress, setSelectedAddress] = useState(null)
   const [paymentMethod, setPaymentMethod] = useState("cash_on_delivery")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+
+  // Address form state - always visible, no buttons
+  const [addressForm, setAddressForm] = useState({
+    fullName: "",
+    address: "",
+    district: "",
+    thana: "",
+    phone: "",
+  })
+  const [addressErrors, setAddressErrors] = useState({})
+  const [addressLoaded, setAddressLoaded] = useState(false)
+
+  // Bangladesh districts for dropdown
+  const bangladeshDistricts = [
+    "Bagerhat",
+    "Bandarban",
+    "Barguna",
+    "Barishal",
+    "Bhola",
+    "Bogura",
+    "Brahmanbaria",
+    "Chandpur",
+    "Chattogram",
+    "Chuadanga",
+    "Cox's Bazar",
+    "Cumilla",
+    "Dhaka",
+    "Dinajpur",
+    "Faridpur",
+    "Feni",
+    "Gaibandha",
+    "Gazipur",
+    "Gopalganj",
+    "Habiganj",
+    "Jamalpur",
+    "Jashore",
+    "Jhalokati",
+    "Jhenaidah",
+    "Joypurhat",
+    "Khagrachhari",
+    "Khulna",
+    "Kishoreganj",
+    "Kurigram",
+    "Kushtia",
+    "Lakshmipur",
+    "Lalmonirhat",
+    "Madaripur",
+    "Magura",
+    "Manikganj",
+    "Meherpur",
+    "Moulvibazar",
+    "Munshiganj",
+    "Mymensingh",
+    "Naogaon",
+    "Narail",
+    "Narayanganj",
+    "Narsingdi",
+    "Natore",
+    "Netrokona",
+    "Nilphamari",
+    "Noakhali",
+    "Pabna",
+    "Panchagarh",
+    "Patuakhali",
+    "Pirojpur",
+    "Rajbari",
+    "Rajshahi",
+    "Rangamati",
+    "Rangpur",
+    "Satkhira",
+    "Shariatpur",
+    "Sherpur",
+    "Sirajganj",
+    "Sunamganj",
+    "Sylhet",
+    "Tangail",
+    "Thakurgaon",
+  ].sort()
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -25,24 +101,82 @@ const CheckoutPage = () => {
     }
 
     if (!items || items.length === 0) {
-      navigate("/cart")
+      navigate("/products")
       return
     }
 
-    fetchAddresses()
+    // Load default address if available
+    loadDefaultAddress()
   }, [isAuthenticated, items, navigate])
 
-  const fetchAddresses = async () => {
+  const loadDefaultAddress = async () => {
     try {
       const response = await addressesAPI.getAll()
-      setAddresses(response.data)
-      // Auto-select default address
-      const defaultAddress = response.data.find((addr) => addr.isDefault)
+      const addresses = response.data || []
+      const defaultAddress = addresses.find((addr) => addr.isDefault) || addresses[0]
+
       if (defaultAddress) {
-        setSelectedAddress(defaultAddress)
+        setAddressForm({
+          fullName: defaultAddress.fullName || "",
+          address: defaultAddress.address || "",
+          district: defaultAddress.district || "",
+          thana: defaultAddress.thana || "",
+          phone: defaultAddress.phone || "",
+        })
       }
+      setAddressLoaded(true)
     } catch (error) {
-      console.error("Error fetching addresses:", error)
+      console.error("Error loading default address:", error)
+      setAddressLoaded(true)
+    }
+  }
+
+  const validateAddressForm = () => {
+    const errors = {}
+
+    if (!addressForm.fullName.trim()) {
+      errors.fullName = "Full name is required"
+    }
+
+    if (!addressForm.phone.trim()) {
+      errors.phone = "Phone number is required"
+    } else if (!/^01[3-9]\d{8}$/.test(addressForm.phone.replace(/\s+/g, ""))) {
+      errors.phone = "Please enter a valid Bangladeshi phone number"
+    }
+
+    if (!addressForm.address.trim()) {
+      errors.address = "Address is required"
+    }
+
+    if (!addressForm.district.trim()) {
+      errors.district = "District is required"
+    }
+
+    if (!addressForm.thana.trim()) {
+      errors.thana = "Thana/Upazila is required"
+    }
+
+    setAddressErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const saveAddressAsDefault = async () => {
+    try {
+      // Save the address to user's account as default
+      const addressData = {
+        fullName: addressForm.fullName,
+        address: addressForm.address,
+        district: addressForm.district,
+        thana: addressForm.thana,
+        phone: addressForm.phone,
+        country: "Bangladesh",
+        isDefault: true,
+      }
+
+      await addressesAPI.create(addressData)
+    } catch (error) {
+      console.error("Error saving address:", error)
+      // Don't block order if address saving fails
     }
   }
 
@@ -55,12 +189,12 @@ const CheckoutPage = () => {
     }, 0)
   }
 
-  const calculateShippingCost = (subtotal, address) => {
+  const calculateShippingCost = (subtotal, district) => {
     if (subtotal >= 2000) return 0 // Free shipping for orders above 2000 taka
 
-    if (address && address.district) {
-      const district = address.district.toLowerCase()
-      const isDhaka = district === "dhaka"
+    if (district) {
+      const districtLower = district.toLowerCase()
+      const isDhaka = districtLower === "dhaka"
       return isDhaka ? 60 : 100 // 60 for Dhaka, 100 for outside Dhaka
     }
 
@@ -68,7 +202,7 @@ const CheckoutPage = () => {
   }
 
   const subtotal = calculateSubtotal()
-  const shippingCost = calculateShippingCost(subtotal, selectedAddress)
+  const shippingCost = calculateShippingCost(subtotal, addressForm.district)
   const total = subtotal + shippingCost
 
   const formatSizeDisplay = (size, product) => {
@@ -94,8 +228,8 @@ const CheckoutPage = () => {
   }
 
   const handlePlaceOrder = async () => {
-    if (!selectedAddress) {
-      setError("Please select a delivery address")
+    if (!validateAddressForm()) {
+      setError("Please fill in all required address fields correctly")
       return
     }
 
@@ -108,20 +242,13 @@ const CheckoutPage = () => {
     setError("")
 
     try {
-      console.log("Cart items before order:", items)
+      // Save address as default for future orders
+      await saveAddressAsDefault()
 
       const orderItems = items.map((item) => {
         const product = item.product || item
-        console.log("Processing cart item:", item)
-        console.log("Item selectedColor:", item.selectedColor)
-        console.log("Item selectedSize:", item.selectedSize)
-
-        // Extract all possible color and size values
         const selectedColor = item.selectedColor || item.color || null
         const selectedSize = item.selectedSize || item.size || null
-
-        console.log("Final selectedColor:", selectedColor)
-        console.log("Final selectedSize:", selectedSize)
 
         return {
           product: product._id || item.productId,
@@ -134,16 +261,13 @@ const CheckoutPage = () => {
         }
       })
 
-      console.log("Order items to send:", orderItems)
-
-      // Fix address structure to match backend expectations
       const shippingAddress = {
-        fullName: selectedAddress.fullName,
-        address: selectedAddress.address,
-        district: selectedAddress.district, // Use district instead of city
-        thana: selectedAddress.thana, // Use thana instead of postalCode
-        country: selectedAddress.country || "Bangladesh",
-        phone: selectedAddress.phone,
+        fullName: addressForm.fullName,
+        address: addressForm.address,
+        district: addressForm.district,
+        thana: addressForm.thana,
+        country: "Bangladesh",
+        phone: addressForm.phone,
       }
 
       const orderData = {
@@ -156,10 +280,7 @@ const CheckoutPage = () => {
         totalPrice: total,
       }
 
-      console.log("Complete order data:", orderData)
-
       const response = await ordersAPI.create(orderData)
-      console.log("Order created successfully:", response.data)
 
       // Clear cart after successful order
       await dispatch(clearCartAsync())
@@ -187,20 +308,24 @@ const CheckoutPage = () => {
     }
   }
 
-  const getShippingLocation = (address) => {
-    if (address && address.district) {
-      const district = address.district.toLowerCase()
+  const getShippingLocation = () => {
+    if (addressForm.district) {
+      const district = addressForm.district.toLowerCase()
       return district === "dhaka" ? "Inside Dhaka" : "Outside Dhaka"
     }
     return "Outside Dhaka"
   }
 
-  if (cartLoading) {
+  const handleBackToCart = () => {
+    // Use replace to avoid redirect loops
+    navigate("/cart", { replace: true })
+  }
+
+  if (cartLoading || !addressLoaded) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left side skeleton */}
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="h-6 bg-gray-200 rounded animate-pulse mb-4"></div>
@@ -209,21 +334,12 @@ const CheckoutPage = () => {
                   <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4"></div>
                 </div>
               </div>
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <div className="h-6 bg-gray-200 rounded animate-pulse mb-4"></div>
-                <div className="space-y-3">
-                  <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
-                  <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
-                </div>
-              </div>
             </div>
-            {/* Right side skeleton */}
             <div className="bg-white p-6 rounded-lg shadow-md h-fit">
               <div className="h-6 bg-gray-200 rounded animate-pulse mb-4"></div>
               <div className="space-y-3">
                 <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
                 <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
               </div>
             </div>
           </div>
@@ -257,7 +373,7 @@ const CheckoutPage = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <button
-            onClick={() => navigate("/cart")}
+            onClick={handleBackToCart}
             className="flex items-center text-pink-600 hover:text-pink-700 transition-colors mb-4"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -270,62 +386,104 @@ const CheckoutPage = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            {/* Delivery Address */}
+            {/* Delivery Address - Direct Input Fields Only */}
             <div className="bg-white p-6 rounded-lg shadow-md">
-              <div className="flex items-center mb-4">
+              <div className="flex items-center mb-6">
                 <MapPin className="h-5 w-5 text-pink-600 mr-2" />
                 <h2 className="text-xl font-semibold text-gray-900">Delivery Address</h2>
               </div>
 
-              {addresses.length === 0 ? (
-                <div className="text-center py-4">
-                  <p className="text-gray-600 mb-4">No saved addresses found.</p>
-                  <button
-                    onClick={() => navigate("/account?tab=addresses")}
-                    className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors"
-                  >
-                    Add Address
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {addresses.map((address) => (
-                    <div
-                      key={address._id}
-                      className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                        selectedAddress?._id === address._id
-                          ? "border-pink-600 bg-pink-50 ring-2 ring-pink-200"
-                          : "border-gray-300 hover:border-pink-300"
+              {/* Address Form - Always Visible, No Buttons */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Full Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={addressForm.fullName}
+                      onChange={(e) => setAddressForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
+                        addressErrors.fullName ? "border-red-500" : "border-gray-300"
                       }`}
-                      onClick={() => setSelectedAddress(address)}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center mb-1">
-                            <h3 className="font-semibold text-gray-900">{address.fullName}</h3>
-                            {address.isDefault && (
-                              <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
-                                Default
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-gray-600 text-sm">{address.address}</p>
-                          <p className="text-gray-600 text-sm">
-                            {address.thana}, {address.district}
-                          </p>
-                          <p className="text-gray-600 text-sm">{address.phone}</p>
-                        </div>
-                        <input
-                          type="radio"
-                          checked={selectedAddress?._id === address._id}
-                          onChange={() => setSelectedAddress(address)}
-                          className="mt-1 text-pink-600 focus:ring-pink-500"
-                        />
-                      </div>
-                    </div>
-                  ))}
+                      placeholder="Enter your full name"
+                    />
+                    {addressErrors.fullName && <p className="text-red-500 text-xs mt-1">{addressErrors.fullName}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Phone Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={addressForm.phone}
+                      onChange={(e) => setAddressForm((prev) => ({ ...prev, phone: e.target.value }))}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
+                        addressErrors.phone ? "border-red-500" : "border-gray-300"
+                      }`}
+                      placeholder="01XXXXXXXXX"
+                    />
+                    {addressErrors.phone && <p className="text-red-500 text-xs mt-1">{addressErrors.phone}</p>}
+                  </div>
                 </div>
-              )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Address <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={addressForm.address}
+                    onChange={(e) => setAddressForm((prev) => ({ ...prev, address: e.target.value }))}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
+                      addressErrors.address ? "border-red-500" : "border-gray-300"
+                    }`}
+                    placeholder="House/Flat no, Road no, Area name..."
+                  />
+                  {addressErrors.address && <p className="text-red-500 text-xs mt-1">{addressErrors.address}</p>}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      District <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={addressForm.district}
+                      onChange={(e) => setAddressForm((prev) => ({ ...prev, district: e.target.value }))}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
+                        addressErrors.district ? "border-red-500" : "border-gray-300"
+                      }`}
+                    >
+                      <option value="">Select District</option>
+                      {bangladeshDistricts.map((district) => (
+                        <option key={district} value={district}>
+                          {district}
+                        </option>
+                      ))}
+                    </select>
+                    {addressErrors.district && <p className="text-red-500 text-xs mt-1">{addressErrors.district}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Thana/Upazila <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={addressForm.thana}
+                      onChange={(e) => setAddressForm((prev) => ({ ...prev, thana: e.target.value }))}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
+                        addressErrors.thana ? "border-red-500" : "border-gray-300"
+                      }`}
+                      placeholder="Enter thana/upazila"
+                    />
+                    {addressErrors.thana && <p className="text-red-500 text-xs mt-1">{addressErrors.thana}</p>}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Payment Method */}
@@ -358,13 +516,7 @@ const CheckoutPage = () => {
                   </div>
                 </div>
 
-                <div
-                  className={`border rounded-lg p-4 cursor-pointer transition-colors opacity-50 ${
-                    paymentMethod === "bkash"
-                      ? "border-pink-600 bg-pink-50 ring-2 ring-pink-200"
-                      : "border-gray-300 hover:border-pink-300"
-                  }`}
-                >
+                <div className="border rounded-lg p-4 opacity-50 cursor-not-allowed">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold text-gray-900">bKash</h3>
@@ -393,7 +545,9 @@ const CheckoutPage = () => {
                 return (
                   <div key={index} className="flex items-center space-x-3">
                     <img
-                      src={product.images?.[0]?.url || product.image || item.image || "/placeholder.svg"}
+                      src={
+                        product.images?.[0]?.url || product.image || item.image || "/placeholder.svg?height=48&width=48"
+                      }
                       alt={product.name || item.name}
                       className="w-12 h-12 object-cover rounded"
                     />
@@ -427,7 +581,7 @@ const CheckoutPage = () => {
                 <span className="font-medium">{formatPrice(subtotal)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Shipping ({getShippingLocation(selectedAddress)})</span>
+                <span className="text-gray-600">Shipping ({getShippingLocation()})</span>
                 <span className="font-medium">{shippingCost === 0 ? "Free" : formatPrice(shippingCost)}</span>
               </div>
               {shippingCost === 0 && <p className="text-xs text-green-600">🎉 Free shipping on orders above ৳2000!</p>}
@@ -439,7 +593,7 @@ const CheckoutPage = () => {
 
             <button
               onClick={handlePlaceOrder}
-              disabled={loading || !selectedAddress}
+              disabled={loading}
               className="w-full mt-6 bg-pink-600 text-white py-3 px-4 rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {loading ? (

@@ -28,7 +28,24 @@ const RegisterPage = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      // Redirect to return path or account page
+      // Check if there's a pending product selection to handle
+      const pendingSelection = localStorage.getItem("pendingProductSelection")
+
+      if (pendingSelection && returnTo) {
+        try {
+          const selections = JSON.parse(pendingSelection)
+
+          // Redirect back to product page - the product page will handle the pending action
+          const redirectPath = decodeURIComponent(returnTo)
+          navigate(redirectPath)
+          return
+        } catch (error) {
+          console.error("Error parsing pending selection:", error)
+          localStorage.removeItem("pendingProductSelection")
+        }
+      }
+
+      // Normal redirect flow
       const redirectPath = returnTo ? decodeURIComponent(returnTo) : "/account"
       navigate(redirectPath)
     }
@@ -119,6 +136,11 @@ const RegisterPage = () => {
               <div className="text-center mb-8">
                 <h2 className="text-3xl font-bold text-gray-900">Create Account</h2>
                 <p className="text-gray-600 mt-2">Join us today and start shopping</p>
+                {returnTo && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">🛍️ Create an account to continue with your purchase</p>
+                  </div>
+                )}
               </div>
 
               {(error || validationError) && (
@@ -248,7 +270,10 @@ const RegisterPage = () => {
               <div className="mt-6 text-center">
                 <p className="text-sm text-gray-600">
                   Already have an account?{" "}
-                  <Link to="/auth/login" className="text-pink-600 hover:text-pink-700 font-medium">
+                  <Link
+                    to={`/auth/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`}
+                    className="text-pink-600 hover:text-pink-700 font-medium"
+                  >
                     Sign in
                   </Link>
                 </p>

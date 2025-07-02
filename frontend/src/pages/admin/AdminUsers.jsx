@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { useSelector } from "react-redux"
 import { useNavigate } from "react-router-dom"
-import { Search, Shield, ShieldOff, UserCheck, UserX } from "lucide-react"
+import { Search, Shield, ShieldOff, UserCheck, UserX, UsersIcon, Filter } from "lucide-react"
 import { usersAPI } from "../../lib/api"
 
 const AdminUsers = () => {
@@ -11,6 +11,8 @@ const AdminUsers = () => {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [roleFilter, setRoleFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState({})
 
@@ -21,7 +23,7 @@ const AdminUsers = () => {
     }
 
     fetchUsers()
-  }, [isAuthenticated, user, navigate, currentPage, searchTerm])
+  }, [isAuthenticated, user, navigate, currentPage, searchTerm, roleFilter, statusFilter])
 
   const fetchUsers = async () => {
     try {
@@ -29,6 +31,8 @@ const AdminUsers = () => {
       const response = await usersAPI.getAll({
         page: currentPage,
         search: searchTerm,
+        role: roleFilter !== "all" ? roleFilter : undefined,
+        isActive: statusFilter !== "all" ? statusFilter === "active" : undefined,
         limit: 10,
       })
       setUsers(response.data.users)
@@ -66,9 +70,16 @@ const AdminUsers = () => {
     fetchUsers()
   }
 
+  const clearFilters = () => {
+    setSearchTerm("")
+    setRoleFilter("all")
+    setStatusFilter("all")
+    setCurrentPage(1)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
@@ -76,10 +87,16 @@ const AdminUsers = () => {
           </div>
         </div>
 
-        {/* Search */}
+        {/* Filters */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <form onSubmit={handleSearch} className="flex gap-4">
-            <div className="flex-1">
+          <div className="flex items-center mb-4">
+            <Filter className="h-5 w-5 text-gray-500 mr-2" />
+            <h2 className="text-lg font-semibold text-gray-900">Search & Filters</h2>
+          </div>
+
+          <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Search Users</label>
               <div className="relative">
                 <input
                   type="text"
@@ -91,19 +108,78 @@ const AdminUsers = () => {
                 <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               </div>
             </div>
-            <button
-              type="submit"
-              className="bg-pink-600 text-white px-6 py-2 rounded-lg hover:bg-pink-700 transition-colors"
-            >
-              Search
-            </button>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+              >
+                <option value="all">All Roles</option>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+
+            <div className="flex items-end space-x-2">
+              <button
+                type="submit"
+                className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors"
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
           </form>
+        </div>
+
+        {/* Users Summary */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Users Summary</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">{pagination.totalUsers || 0}</p>
+              <p className="text-sm text-gray-600">Total Users</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600">{users.filter((u) => u.isActive).length}</p>
+              <p className="text-sm text-gray-600">Active Users</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-purple-600">{users.filter((u) => u.role === "admin").length}</p>
+              <p className="text-sm text-gray-600">Admin Users</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-red-600">{users.filter((u) => !u.isActive).length}</p>
+              <p className="text-sm text-gray-600">Inactive Users</p>
+            </div>
+          </div>
         </div>
 
         {/* Users Table */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -135,13 +211,17 @@ const AdminUsers = () => {
                   </tr>
                 ) : users.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
-                      No users found
+                    <td colSpan="6" className="px-6 py-4 text-center">
+                      <div className="flex flex-col items-center py-8">
+                        <UsersIcon className="h-12 w-12 text-gray-400 mb-4" />
+                        <p className="text-gray-500 text-lg">No users found</p>
+                        <p className="text-gray-400 text-sm">Try adjusting your search or filters</p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   users.map((userItem) => (
-                    <tr key={userItem._id}>
+                    <tr key={userItem._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="h-10 w-10 bg-pink-100 rounded-full flex items-center justify-center">
@@ -183,7 +263,7 @@ const AdminUsers = () => {
                               onClick={() =>
                                 handleRoleChange(userItem._id, userItem.role === "admin" ? "user" : "admin")
                               }
-                              className={`p-1 rounded ${
+                              className={`p-1 rounded transition-colors ${
                                 userItem.role === "admin"
                                   ? "text-purple-600 hover:text-purple-900"
                                   : "text-gray-600 hover:text-purple-600"
@@ -202,7 +282,7 @@ const AdminUsers = () => {
                           {userItem._id !== user._id && (
                             <button
                               onClick={() => handleStatusChange(userItem._id, !userItem.isActive)}
-                              className={`p-1 rounded ${
+                              className={`p-1 rounded transition-colors ${
                                 userItem.isActive
                                   ? "text-red-600 hover:text-red-900"
                                   : "text-green-600 hover:text-green-900"
@@ -225,19 +305,19 @@ const AdminUsers = () => {
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200">
+            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
               <div className="flex-1 flex justify-between sm:hidden">
                 <button
                   onClick={() => setCurrentPage(currentPage - 1)}
                   disabled={!pagination.hasPrev}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Previous
                 </button>
                 <button
                   onClick={() => setCurrentPage(currentPage + 1)}
                   disabled={!pagination.hasNext}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>
@@ -254,14 +334,30 @@ const AdminUsers = () => {
                     <button
                       onClick={() => setCurrentPage(currentPage - 1)}
                       disabled={!pagination.hasPrev}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Previous
                     </button>
+                    {[...Array(pagination.totalPages)].map((_, index) => {
+                      const page = index + 1
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                            currentPage === page
+                              ? "z-10 bg-pink-50 border-pink-500 text-pink-600"
+                              : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      )
+                    })}
                     <button
                       onClick={() => setCurrentPage(currentPage + 1)}
                       disabled={!pagination.hasNext}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Next
                     </button>
