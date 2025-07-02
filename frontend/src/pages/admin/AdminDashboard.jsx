@@ -26,14 +26,16 @@ const AdminDashboard = () => {
       return
     }
 
-    dispatch(fetchProducts({}))
+    // Fetch all products for accurate count
+    dispatch(fetchProducts({ limit: 1000, page: 1 }))
     fetchOrders()
   }, [dispatch, isAuthenticated, user, navigate])
 
   const fetchOrders = async () => {
     try {
       setOrdersLoading(true)
-      const response = await ordersAPI.getAll({ limit: 5 })
+      // Fetch all orders for accurate statistics
+      const response = await ordersAPI.getAll({ limit: 1000 })
       setOrders(response.data.orders)
     } catch (error) {
       console.error("Error fetching orders:", error)
@@ -66,7 +68,7 @@ const AdminDashboard = () => {
       try {
         await dispatch(deleteProduct(productId)).unwrap()
         // Refresh products list
-        dispatch(fetchProducts({}))
+        dispatch(fetchProducts({ limit: 1000, page: 1 }))
       } catch (error) {
         console.error("Error deleting product:", error)
         alert("Failed to delete product")
