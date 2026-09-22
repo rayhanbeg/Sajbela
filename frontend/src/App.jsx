@@ -1,48 +1,61 @@
-
-import { Routes, Route, useLocation } from "react-router-dom"
-import { useEffect } from "react"
+import { Suspense, lazy, useEffect } from "react"
+import { Route, Routes, useLocation } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
-import Header from "./components/layout/Header"
-import Footer from "./components/layout/Footer"
+
+import StorefrontLayout from "./components/layout/StorefrontLayout"
+import ProtectedRoute from "./components/ProtectedRoute"
+import { ConfirmProvider, Spinner, ToastProvider } from "./components/ui"
+import { fetchUserProfile } from "./lib/store/authSlice"
+
+// Storefront pages — eagerly loaded; these are the hot path.
 import HomePage from "./pages/HomePage"
 import ProductsPage from "./pages/ProductsPage"
 import ProductDetailPage from "./pages/ProductDetailPage"
+import CategoryPage from "./pages/CategoryPage"
 import CartPage from "./pages/CartPage"
 import CheckoutPage from "./pages/CheckoutPage"
 import OrderSuccessPage from "./pages/OrderSuccessPage"
-import AboutPage from "./pages/AboutPage"
-import ContactPage from "./pages/ContactPage"
-import FAQPage from "./pages/FAQPage"
-import ShippingPage from "./pages/ShippingPage"
-import ReturnsPage from "./pages/ReturnsPage"
+import AccountPage from "./pages/AccountPage"
 import LoginPage from "./pages/auth/LoginPage"
 import RegisterPage from "./pages/auth/RegisterPage"
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage"
-import AccountPage from "./pages/AccountPage"
-import AdminDashboard from "./pages/admin/AdminDashboard"
-import AdminProducts from "./pages/admin/AdminProducts"
-import AdminProductForm from "./pages/admin/AdminProductForm"
-import AdminOrders from "./pages/admin/AdminOrders"
-import AdminUsers from "./pages/admin/AdminUsers"
-import ProtectedRoute from "./components/ProtectedRoute"
-import { fetchUserProfile } from "./lib/store/authSlice"
-import WhatsAppButton from "./components/WhatsAppButton"
+import NotFoundPage from "./pages/NotFoundPage"
 
-// Component to handle scroll to top on route change
+// Informational pages — split out, they're rarely the entry point.
+const AboutPage = lazy(() => import("./pages/AboutPage"))
+const ContactPage = lazy(() => import("./pages/ContactPage"))
+const FAQPage = lazy(() => import("./pages/FAQPage"))
+const ShippingPage = lazy(() => import("./pages/ShippingPage"))
+const ReturnsPage = lazy(() => import("./pages/ReturnsPage"))
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"))
+const TermsPage = lazy(() => import("./pages/TermsPage"))
+
+// Admin — lazy-loaded so shoppers never download the admin panel.
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"))
+const AdminProducts = lazy(() => import("./pages/admin/AdminProducts"))
+const AdminProductForm = lazy(() => import("./pages/admin/AdminProductForm"))
+const AdminOrders = lazy(() => import("./pages/admin/AdminOrders"))
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"))
+
+/** Scrolls to the top on every route change. */
 const ScrollToTop = () => {
   const { pathname } = useLocation()
 
   useEffect(() => {
-    // Scroll to top immediately when route changes
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: "instant",
-    })
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" })
   }, [pathname])
 
   return null
 }
+
+/** Fallback shown while a lazy chunk downloads. */
+const RouteFallback = () => (
+  <div className="flex min-h-[60vh] items-center justify-center">
+    <Spinner size="lg" className="text-pink-600" label="Loading page" />
+  </div>
+)
+
+const adminRoute = (element) => <ProtectedRoute adminOnly>{element}</ProtectedRoute>
 
 function App() {
   const dispatch = useDispatch()
@@ -55,88 +68,62 @@ function App() {
   }, [dispatch, token, isAuthenticated])
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <ScrollToTop />
-      <Header />
-      <main className="flex-1">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/products" element={<ProductsPage />} />
-          <Route path="/products/:id" element={<ProductDetailPage />} />
-          <Route path="/cart" element={<CartPage />} />
-          <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/order-success" element={<OrderSuccessPage />} />
-          <Route
-            path="/account"
-            element={
-              <ProtectedRoute>
-                <AccountPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/auth/login" element={<LoginPage />} />
-          <Route path="/auth/register" element={<RegisterPage />} />
-          <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
-          {/* <Route path="/about" element={<AboutPage />} />
-          <Route path="/contact" element={<ContactPage />} /> */}
-          <Route path="/shipping" element={<ShippingPage />} />
-          <Route path="/returns" element={<ReturnsPage />} />
-          <Route path="/faq" element={<FAQPage />} />
+    <ToastProvider>
+      <ConfirmProvider>
+        <ScrollToTop />
 
-          {/* Admin Routes */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute adminOnly>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/products"
-            element={
-              <ProtectedRoute adminOnly>
-                <AdminProducts />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/products/new"
-            element={
-              <ProtectedRoute adminOnly>
-                <AdminProductForm />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/products/:id/edit"
-            element={
-              <ProtectedRoute adminOnly>
-                <AdminProductForm />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/orders"
-            element={
-              <ProtectedRoute adminOnly>
-                <AdminOrders />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/users"
-            element={
-              <ProtectedRoute adminOnly>
-                <AdminUsers />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </main>
-      <Footer />
-      <WhatsAppButton />
-    </div>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route element={<StorefrontLayout />}>
+              {/* Shop */}
+              <Route path="/" element={<HomePage />} />
+              <Route path="/products" element={<ProductsPage />} />
+              <Route path="/products/:id" element={<ProductDetailPage />} />
+              <Route path="/category/:slug" element={<CategoryPage />} />
+
+              {/* Purchase flow */}
+              <Route path="/cart" element={<CartPage />} />
+              <Route path="/checkout" element={<CheckoutPage />} />
+              <Route path="/order-success" element={<OrderSuccessPage />} />
+
+              {/* Account */}
+              <Route
+                path="/account"
+                element={
+                  <ProtectedRoute>
+                    <AccountPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Auth */}
+              <Route path="/auth/login" element={<LoginPage />} />
+              <Route path="/auth/register" element={<RegisterPage />} />
+              <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+
+              {/* Info — these were previously commented out, leaving dead footer links. */}
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/faq" element={<FAQPage />} />
+              <Route path="/shipping" element={<ShippingPage />} />
+              <Route path="/returns" element={<ReturnsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+
+              {/* Admin — moves to its own shell in the admin redesign phase. */}
+              <Route path="/admin" element={adminRoute(<AdminDashboard />)} />
+              <Route path="/admin/products" element={adminRoute(<AdminProducts />)} />
+              <Route path="/admin/products/new" element={adminRoute(<AdminProductForm />)} />
+              <Route path="/admin/products/:id/edit" element={adminRoute(<AdminProductForm />)} />
+              <Route path="/admin/orders" element={adminRoute(<AdminOrders />)} />
+              <Route path="/admin/users" element={adminRoute(<AdminUsers />)} />
+
+              <Route path="*" element={<NotFoundPage />} />
+            </Route>
+          </Routes>
+        </Suspense>
+      </ConfirmProvider>
+    </ToastProvider>
   )
 }
 

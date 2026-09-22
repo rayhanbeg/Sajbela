@@ -1,424 +1,374 @@
-
-
-import { useState, useEffect } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { useSelector, useDispatch } from "react-redux"
-import { Search, X, Menu, ChevronDown, ChevronRight, Home, ShoppingBag, User, ShoppingCart } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
+import { useDispatch, useSelector } from "react-redux"
+import { ChevronDown, LayoutDashboard, LogOut, Menu, Package, Phone, Search, ShoppingBag, Truck, User } from "lucide-react"
+import { cn } from "../../lib/cn"
 import { logout, fetchUserProfile } from "../../lib/store/authSlice"
 import { fetchCartItems } from "../../lib/store/cartSlice"
+import { useClickOutside } from "../../lib/hooks"
+import { CATEGORIES, PRIMARY_NAV, SHIPPING, STORE, categoryPath } from "../../lib/navigation"
+import { formatPrice } from "../../lib/utils"
+import { Badge, CountBadge, IconButton } from "../ui"
 import logo from "../../assets/logo.png"
 
-const Header = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [isCategoriesOpen, setIsCategoriesOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
-  const navigate = useNavigate()
+/**
+ * Storefront header.
+ *
+ * The brand's solid pink bar is retained deliberately — it's the store's
+ * signature and the palette is locked. What changed is everything around it:
+ * a proper three-zone desktop layout, an accessible category mega-menu, a
+ * real search affordance, and a stripped-back mobile bar that hands primary
+ * navigation to <BottomNav/>.
+ */
+const Header = ({ onSearchClick, onCartClick, onMenuClick }) => {
   const dispatch = useDispatch()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const { totalItems } = useSelector((state) => state.cart)
   const { isAuthenticated, user } = useSelector((state) => state.auth)
 
-  // Auto-refresh user profile every 30 seconds to check for role updates
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      const interval = setInterval(() => {
-        dispatch(fetchUserProfile())
-      }, 30000) // 30 seconds
+  const [categoriesOpen, setCategoriesOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [inlineQuery, setInlineQuery] = useState("")
 
-      return () => clearInterval(interval)
-    }
-  }, [isAuthenticated, user, dispatch])
+  const categoriesRef = useClickOutside(categoriesOpen, () => setCategoriesOpen(false))
+  const accountRef = useClickOutside(accountOpen, () => setAccountOpen(false))
+  const closeTimer = useRef(null)
 
-  // Fetch cart items when user logs in
+  const isAdmin = isAuthenticated && user?.role === "admin"
+
+  // Refresh the profile once on mount when authenticated, so a role change
+  // made in the admin panel is picked up. (The old 30s poll is gone — it fired
+  // a request every half minute on every page for no real benefit.)
   useEffect(() => {
-    if (isAuthenticated) {
-      dispatch(fetchCartItems())
-    }
+    if (isAuthenticated) dispatch(fetchUserProfile())
   }, [isAuthenticated, dispatch])
 
-  // Close mobile menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (isMenuOpen && !event.target.closest(".mobile-menu") && !event.target.closest(".menu-button")) {
-        setIsMenuOpen(false)
-      }
-    }
+    if (isAuthenticated) dispatch(fetchCartItems())
+  }, [isAuthenticated, dispatch])
 
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [isMenuOpen])
-
-  // Prevent body scroll when mobile menu is open
+  // Close menus on navigation.
   useEffect(() => {
-    if (isMenuOpen) {
-      document.body.style.overflow = "hidden"
-    } else {
-      document.body.style.overflow = "unset"
-    }
+    setCategoriesOpen(false)
+    setAccountOpen(false)
+  }, [location.pathname, location.search])
 
-    return () => {
-      document.body.style.overflow = "unset"
-    }
-  }, [isMenuOpen])
+  useEffect(() => () => clearTimeout(closeTimer.current), [])
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    if (searchQuery.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchQuery)}`)
-      setSearchQuery("")
-      setIsSearchOpen(false)
-      setIsMenuOpen(false)
-    }
+  const handleInlineSearch = (event) => {
+    event.preventDefault()
+    const trimmed = inlineQuery.trim()
+    if (!trimmed) return
+    navigate(`/products?search=${encodeURIComponent(trimmed)}`)
+    setInlineQuery("")
   }
 
   const handleLogout = () => {
     dispatch(logout())
+    setAccountOpen(false)
     navigate("/")
-    setIsMenuOpen(false)
   }
 
-  const handleLogoClick = () => {
-    navigate("/")
-    setIsMenuOpen(false)
-    // Scroll to top when clicking logo
-    setTimeout(() => {
-      window.scrollTo({
-        top: 0,
-        left: 0,
-        behavior: "smooth",
-      })
-    }, 100)
+  const isNavActive = (to) => (to === "/" ? location.pathname === "/" : location.pathname.startsWith(to))
+
+  // Hover intent for the categories menu — a short close delay stops the panel
+  // vanishing when the pointer crosses the gap between trigger and panel.
+  const openCategories = () => {
+    clearTimeout(closeTimer.current)
+    setCategoriesOpen(true)
+  }
+  const scheduleCloseCategories = () => {
+    clearTimeout(closeTimer.current)
+    closeTimer.current = setTimeout(() => setCategoriesOpen(false), 160)
   }
 
-  const handleHomeClick = () => {
-    navigate("/")
-    setIsMenuOpen(false)
-    // Scroll to top when clicking home
-    setTimeout(() => {
-      window.scrollTo({
-        top: 0,
-        left: 0,
-        behavior: "smooth",
-      })
-    }, 100)
-  }
-
-  const handleNavClick = (path) => {
-    navigate(path)
-    setIsMenuOpen(false)
-    setIsCategoriesOpen(false)
-  }
-
-  const categories = [
-    { name: "Bangles", path: "/products?category=bangles" },
-    { name: "Earrings", path: "/products?category=earrings" },
-    { name: "Cosmetics", path: "/products?category=cosmetics" },
-    { name: "Necklaces", path: "/products?category=necklaces" },
-    { name: "Rings", path: "/products?category=rings" },
-    { name: "Alna", path: "/products?category=alna" },
-    { name: "Combo", path: "/products?category=combo" },
-  ]
+  const desktopLinkClass = (active) =>
+    cn(
+      "relative rounded-md px-1 py-1.5 text-sm font-medium text-white/90 transition-colors duration-200",
+      "hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-pink-600",
+      "after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:rounded-full after:bg-white",
+      "after:transition-transform after:duration-300 after:ease-out-expo after:origin-left",
+      active ? "text-white after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100",
+    )
 
   return (
     <>
-      {/* Top Banner */}
-      <div className="bg-pink-600 text-white text-center py-2 text-sm">
-        <p>Free Delivery on Orders Above ৳2000</p>
-        <p>Cash on Delivery Available | Call: +8801782-723804</p>
+      {/* Skip link — first tab stop, lets keyboard users jump the nav. */}
+      <a
+        href="#main-content"
+        className="sr-only-focusable fixed left-4 top-4 z-toast rounded-lg bg-white px-4 py-2 text-sm font-semibold text-pink-700 shadow-lg"
+      >
+        Skip to main content
+      </a>
+
+      {/* Announcement bar */}
+      <div className="bg-pink-700 text-white">
+        <div className="page-container flex h-9 items-center justify-center gap-x-6 gap-y-0.5 text-xs sm:text-[0.8125rem]">
+          <p className="flex items-center gap-1.5">
+            <Truck aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <span className="hidden xs:inline">Free delivery over</span>
+            <span className="xs:hidden">Free over</span>
+            <span className="font-semibold">{formatPrice(SHIPPING.freeThreshold)}</span>
+          </p>
+
+          <span aria-hidden="true" className="hidden h-3 w-px bg-white/30 sm:block" />
+
+          <p className="hidden sm:block">Cash on Delivery available</p>
+
+          <span aria-hidden="true" className="hidden h-3 w-px bg-white/30 md:block" />
+
+          <a
+            href={STORE.phoneHref}
+            className="hidden items-center gap-1.5 font-medium transition-opacity hover:opacity-80 md:flex"
+          >
+            <Phone aria-hidden="true" className="h-3.5 w-3.5" />
+            {STORE.phone}
+          </a>
+        </div>
       </div>
 
-      {/* Main Header */}
-      <header className="bg-pink-600 shadow-md sticky top-0 z-50">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between py-4">
+      <header className="sticky top-0 z-header bg-pink-600 shadow-md">
+        <div className="page-container">
+          <div className="flex h-16 items-center gap-3 lg:h-[4.5rem] lg:gap-6">
+            {/* Mobile: menu button */}
+            <IconButton
+              label="Open menu"
+              variant="ghost-light"
+              onClick={onMenuClick}
+              className="-ml-2 shrink-0 md:hidden"
+            >
+              <Menu />
+            </IconButton>
+
             {/* Logo */}
-            <button onClick={handleLogoClick} className="text-2xl font-bold text-white">
-              <img src={logo || "/placeholder.svg"} alt="Logo" className="h-8 lg:h-12" />
-            </button>
+            <Link
+              to="/"
+              className="shrink-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-pink-600"
+            >
+              <img src={logo} alt={`${STORE.name} — home`} className="h-8 w-auto lg:h-11" width="120" height="44" />
+            </Link>
 
-            {/* Navigation - Desktop */}
-            <nav className="hidden md:flex items-center space-x-8">
-              <button onClick={handleHomeClick} className="text-white hover:text-pink-200 transition-colors">
-                Home
-              </button>
+            {/* Desktop nav */}
+            <nav aria-label="Main" className="hidden items-center gap-6 md:flex">
+              {PRIMARY_NAV.map((item) => (
+                <Link key={item.to} to={item.to} className={desktopLinkClass(isNavActive(item.to))}>
+                  {item.label}
+                </Link>
+              ))}
 
-              {/* Categories Dropdown - Desktop */}
-              <div className="relative group">
-                <button className="text-white hover:text-pink-200 transition-colors flex items-center">
+              {/* Categories mega-menu */}
+              <div
+                ref={categoriesRef}
+                className="relative"
+                onMouseEnter={openCategories}
+                onMouseLeave={scheduleCloseCategories}
+              >
+                <button
+                  type="button"
+                  onClick={() => setCategoriesOpen((prev) => !prev)}
+                  aria-expanded={categoriesOpen}
+                  aria-haspopup="true"
+                  className={cn(desktopLinkClass(location.pathname.startsWith("/category")), "flex items-center gap-1")}
+                >
                   Categories
-                  <ChevronDown className="w-4 h-4 ml-1" />
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={cn("h-4 w-4 transition-transform duration-200", categoriesOpen && "rotate-180")}
+                  />
                 </button>
-                <div className="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                  {categories.map((category) => (
-                    <Link
-                      key={category.name}
-                      to={category.path}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-pink-50 hover:text-pink-600 transition-colors"
-                    >
-                      {category.name}
-                    </Link>
-                  ))}
-                </div>
+
+                {categoriesOpen && (
+                  <div
+                    className={cn(
+                      "absolute left-1/2 top-full z-overlay w-[34rem] -translate-x-1/2 pt-4",
+                      "animate-fade-in-up",
+                    )}
+                  >
+                    <div className="overflow-hidden rounded-sheet border border-gray-100 bg-white p-2 shadow-drawer">
+                      <ul className="grid grid-cols-2 gap-1">
+                        {CATEGORIES.map((category) => (
+                          <li key={category.slug}>
+                            <Link
+                              to={categoryPath(category.slug)}
+                              className="group flex items-center gap-3 rounded-lg p-2.5 transition-colors duration-200 hover:bg-pink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className={cn(
+                                  "h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br transition-transform duration-300 group-hover:scale-105",
+                                  category.accent,
+                                )}
+                              />
+                              <span className="min-w-0">
+                                <span className="block text-sm font-semibold text-gray-900 group-hover:text-pink-700">
+                                  {category.label}
+                                </span>
+                                <span className="block truncate text-xs text-gray-500">{category.tagline}</span>
+                              </span>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <Link
+                        to="/products"
+                        className="mt-1 flex items-center justify-center gap-1.5 rounded-lg bg-gray-50 py-2.5 text-sm font-semibold text-pink-600 transition-colors hover:bg-pink-50 hover:text-pink-700"
+                      >
+                        View all products
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <Link to="/products" className="text-white hover:text-pink-200 transition-colors">
-                Shop
-              </Link>
-              {/* Admin Link - Only show for admin users */}
-              {isAuthenticated && user?.role === "admin" && (
-                <Link to="/admin" className="text-yellow-200 hover:text-yellow-100 transition-colors font-medium">
-                  Admin Panel
+              {isAdmin && (
+                <Link to="/admin" className={cn(desktopLinkClass(isNavActive("/admin")), "text-yellow-200 hover:text-yellow-100")}>
+                  Admin
                 </Link>
               )}
             </nav>
 
-            {/* Search Bar - Desktop */}
-            <form onSubmit={handleSearch} className="hidden md:flex items-center">
-              <div className="flex">
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-64 px-4 py-2.5 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-pink-500 h-10"
+            {/* Desktop search — takes the remaining space */}
+            <form onSubmit={handleInlineSearch} role="search" className="ml-auto hidden max-w-md flex-1 lg:block">
+              <label htmlFor="header-search" className="sr-only">
+                Search products
+              </label>
+              <div className="relative">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
                 />
-                <button
-                  type="submit"
-                  className="bg-pink-700 text-white px-4 py-2.5 rounded-r-lg hover:bg-pink-800 transition-colors h-10 flex items-center justify-center"
-                >
-                  <Search className="h-5 w-5" />
-                </button>
+                <input
+                  id="header-search"
+                  type="search"
+                  value={inlineQuery}
+                  onChange={(event) => setInlineQuery(event.target.value)}
+                  placeholder="Search for bangles, earrings…"
+                  className={cn(
+                    "h-10 w-full rounded-full border border-transparent bg-white/95 pl-10 pr-4 text-sm text-gray-900",
+                    "placeholder:text-gray-400 transition-[background-color,box-shadow] duration-200",
+                    "focus:bg-white focus:outline-none focus:ring-2 focus:ring-white/70",
+                  )}
+                />
               </div>
             </form>
 
-            {/* User Actions */}
-            <div className="flex items-center space-x-4">
-              {/* Mobile Search Button */}
-              <button
-                onClick={() => setIsSearchOpen(!isSearchOpen)}
-                className="md:hidden text-white hover:text-pink-200 transition-colors p-2"
-              >
-                {isSearchOpen ? <X className="h-6 w-6" /> : <Search className="h-6 w-6" />}
-              </button>
+            {/* Actions */}
+            <div className={cn("flex items-center gap-0.5 sm:gap-1", "ml-auto lg:ml-0")}>
+              {/* Search — icon opens the overlay below lg, where the inline field is hidden */}
+              <IconButton label="Search" variant="ghost-light" onClick={onSearchClick} className="lg:hidden">
+                <Search />
+              </IconButton>
 
-              {isAuthenticated ? (
-                <div className="relative group">
-                  <button className="flex items-center space-x-2 text-white hover:text-pink-200">
-                    <User className="h-5 w-5" />
-                    <span className="hidden md:inline">{user?.name}</span>
-                    {user?.role === "admin" && (
-                      <span className="bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded-full">Admin</span>
-                    )}
-                  </button>
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                    <Link to="/account" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                      My Account
-                    </Link>
-                    {user?.role === "admin" && (
-                      <Link to="/admin" className="block px-4 py-2 text-sm text-yellow-700 hover:bg-yellow-50">
-                        Admin Panel
-                      </Link>
-                    )}
-                    <button
-                      onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              {/* Account (desktop only — mobile uses the bottom nav) */}
+              <div ref={accountRef} className="relative hidden md:block">
+                <button
+                  type="button"
+                  onClick={() => (isAuthenticated ? setAccountOpen((prev) => !prev) : navigate("/auth/login"))}
+                  aria-expanded={isAuthenticated ? accountOpen : undefined}
+                  aria-haspopup={isAuthenticated ? "true" : undefined}
+                  className={cn(
+                    "flex h-10 items-center gap-2 rounded-full px-2.5 text-white/90",
+                    "transition-colors duration-200 hover:bg-white/15 hover:text-white",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-pink-600",
+                  )}
+                >
+                  {isAuthenticated ? (
+                    <span
+                      aria-hidden="true"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs font-bold"
                     >
-                      Logout
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <Link to="/auth/login" className="text-white hover:text-pink-200 transition-colors p-2">
-                  <User className="h-5 w-5" />
-                </Link>
-              )}
+                      {user?.name?.charAt(0)?.toUpperCase() || "S"}
+                    </span>
+                  ) : (
+                    <User aria-hidden="true" className="h-5 w-5" />
+                  )}
 
-              <Link to="/cart" className="relative text-white hover:text-pink-200 transition-colors p-2">
-                <ShoppingCart className="h-5 w-5" />
-                {totalItems > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {totalItems}
+                  <span className="hidden max-w-[7rem] truncate text-sm font-medium lg:inline">
+                    {isAuthenticated ? user?.name : "Sign in"}
                   </span>
-                )}
-              </Link>
 
-              {/* Mobile Menu Button */}
+                  {isAuthenticated && (
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={cn("hidden h-4 w-4 transition-transform duration-200 lg:block", accountOpen && "rotate-180")}
+                    />
+                  )}
+                </button>
+
+                {isAuthenticated && accountOpen && (
+                  <div className="absolute right-0 top-full z-overlay mt-2 w-56 animate-fade-in-up overflow-hidden rounded-card border border-gray-100 bg-white shadow-drawer">
+                    <div className="border-b border-gray-100 px-4 py-3">
+                      <p className="truncate text-sm font-semibold text-gray-900">{user?.name}</p>
+                      <p className="truncate text-xs text-gray-500">{user?.email}</p>
+                      {isAdmin && (
+                        <Badge tone="admin" size="xs" className="mt-1.5">
+                          Administrator
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="p-1.5">
+                      <Link
+                        to="/account"
+                        className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 hover:text-pink-600"
+                      >
+                        <User aria-hidden="true" className="h-4 w-4" />
+                        My Account
+                      </Link>
+                      <Link
+                        to="/account"
+                        className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 hover:text-pink-600"
+                      >
+                        <Package aria-hidden="true" className="h-4 w-4" />
+                        My Orders
+                      </Link>
+
+                      {isAdmin && (
+                        <Link
+                          to="/admin"
+                          className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-yellow-700 transition-colors hover:bg-yellow-50"
+                        >
+                          <LayoutDashboard aria-hidden="true" className="h-4 w-4" />
+                          Admin Dashboard
+                        </Link>
+                      )}
+                    </div>
+
+                    <div className="border-t border-gray-100 p-1.5">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-gray-700 transition-colors hover:bg-red-50 hover:text-red-600"
+                      >
+                        <LogOut aria-hidden="true" className="h-4 w-4" />
+                        Log out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cart */}
               <button
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="md:hidden text-white hover:text-pink-200 transition-colors p-2 menu-button"
+                type="button"
+                onClick={onCartClick}
+                aria-label={totalItems > 0 ? `Open cart, ${totalItems} items` : "Open cart"}
+                className={cn(
+                  "relative flex h-10 w-10 items-center justify-center rounded-full text-white/90",
+                  "transition-colors duration-200 hover:bg-white/15 hover:text-white active:scale-95",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-pink-600",
+                )}
               >
-                {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                <ShoppingBag aria-hidden="true" className="h-5 w-5" />
+                <CountBadge count={totalItems} className="right-1 top-1" label={null} />
               </button>
             </div>
           </div>
-
-          {/* Mobile Search Bar */}
-          {isSearchOpen && (
-            <div className="md:hidden pb-4">
-              <form onSubmit={handleSearch} className="flex">
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-pink-500 text-base"
-                  autoFocus
-                />
-                <button
-                  type="submit"
-                  className="bg-pink-700 text-white px-6 py-3 rounded-r-lg hover:bg-pink-800 transition-colors flex items-center justify-center"
-                >
-                  <Search className="h-5 w-5" />
-                </button>
-              </form>
-            </div>
-          )}
         </div>
       </header>
-
-      {/* Mobile Menu Overlay */}
-      {isMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          {/* Backdrop */}
-          <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" />
-
-          {/* Menu Panel */}
-          <div className="fixed inset-y-0 right-0 w-full max-w-sm bg-pink-600 shadow-xl mobile-menu">
-            <div className="flex flex-col h-full">
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-pink-500">
-                <img src={logo || "/placeholder.svg"} alt="Logo" className="h-8" />
-                <button
-                  onClick={() => setIsMenuOpen(false)}
-                  className="text-white hover:text-pink-200 transition-colors p-2"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              {/* Menu Content */}
-              <div className="flex-1 overflow-y-auto py-4">
-                <nav className="px-4 space-y-2">
-                  {/* Home */}
-                  <button
-                    onClick={handleHomeClick}
-                    className="flex items-center w-full text-left px-4 py-3 text-white hover:bg-pink-700 rounded-lg transition-colors"
-                  >
-                    <Home className="h-5 w-5 mr-3" />
-                    Home
-                  </button>
-
-                  {/* Categories */}
-                  <div className="space-y-1">
-                    <button
-                      onClick={() => setIsCategoriesOpen(!isCategoriesOpen)}
-                      className="flex items-center justify-between w-full text-left px-4 py-3 text-white hover:bg-pink-700 rounded-lg transition-colors"
-                    >
-                      <div className="flex items-center">
-                        <ShoppingBag className="h-5 w-5 mr-3" />
-                        Categories
-                      </div>
-                      {isCategoriesOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </button>
-
-                    {isCategoriesOpen && (
-                      <div className="ml-4 space-y-1">
-                        {categories.map((category) => (
-                          <button
-                            key={category.name}
-                            onClick={() => handleNavClick(category.path)}
-                            className="block w-full text-left px-4 py-2 text-pink-100 hover:bg-pink-700 hover:text-white rounded-lg transition-colors text-sm"
-                          >
-                            {category.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Shop */}
-                  <button
-                    onClick={() => handleNavClick("/products")}
-                    className="flex items-center w-full text-left px-4 py-3 text-white hover:bg-pink-700 rounded-lg transition-colors"
-                  >
-                    <ShoppingBag className="h-5 w-5 mr-3" />
-                    Shop
-                  </button>
-
-                  {/* Admin Link - Mobile */}
-                  {isAuthenticated && user?.role === "admin" && (
-                    <button
-                      onClick={() => handleNavClick("/admin")}
-                      className="flex items-center w-full text-left px-4 py-3 text-yellow-200 hover:bg-pink-700 rounded-lg transition-colors font-medium"
-                    >
-                      <User className="h-5 w-5 mr-3" />
-                      Admin Panel
-                    </button>
-                  )}
-                </nav>
-
-                {/* Search Section */}
-                <div className="px-4 mt-6">
-                  <h3 className="text-pink-200 text-sm font-medium mb-3">Search Products</h3>
-                  <form onSubmit={handleSearch} className="flex">
-                    <input
-                      type="text"
-                      placeholder="Search..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="flex-1 px-4 py-3 border border-pink-500 bg-white rounded-l-lg focus:outline-none focus:ring-2 focus:ring-pink-300 text-base"
-                    />
-                    <button
-                      type="submit"
-                      className="bg-pink-700 text-white px-4 py-3 rounded-r-lg hover:bg-pink-800 transition-colors"
-                    >
-                      <Search className="h-5 w-5" />
-                    </button>
-                  </form>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="border-t border-pink-500 p-4">
-                {isAuthenticated ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center px-4 py-2 text-white">
-                      <User className="h-5 w-5 mr-3" />
-                      <div>
-                        <p className="font-medium">{user?.name}</p>
-                        {user?.role === "admin" && (
-                          <span className="bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded-full">Admin</span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleNavClick("/account")}
-                      className="w-full text-left px-4 py-2 text-pink-100 hover:bg-pink-700 hover:text-white rounded-lg transition-colors"
-                    >
-                      My Account
-                    </button>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-4 py-2 text-pink-100 hover:bg-pink-700 hover:text-white rounded-lg transition-colors"
-                    >
-                      Logout
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => handleNavClick("/auth/login")}
-                    className="flex items-center w-full text-left px-4 py-3 text-white hover:bg-pink-700 rounded-lg transition-colors"
-                  >
-                    <User className="h-5 w-5 mr-3" />
-                    Login / Register
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }
