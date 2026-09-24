@@ -1,182 +1,204 @@
-import { useState } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
-import { Filter } from "lucide-react"
+import { useEffect, useState } from "react"
+import { X } from "lucide-react"
 
-const ProductFilters = ({ filters, onFilterChange }) => {
-  const navigate = useNavigate()
-  const [urlSearchParams] = useSearchParams()
-  const [isOpen, setIsOpen] = useState(false)
+import { COLORS, PRICE_RANGES } from "../../lib/catalog"
+import { CATEGORIES, categoryPath } from "../../lib/navigation"
+import { cn } from "../../lib/cn"
+import { Button, Input } from "../ui"
 
-  const categories = [
-    { value: "bangles", label: "Bangles" },
-    { value: "earrings", label: "Earrings" },
-    { value: "cosmetics", label: "Cosmetics" },
-    { value: "necklaces", label: "Necklaces" },
-    { value: "rings", label: "Rings" },
-    { value: "alna", label: "Alna" },
-    { value: "combo", label: "Combo" },
-  ]
+/**
+ * Catalogue filter panel. Purely presentational — it reads the current filter
+ * values and reports changes through `onChange(patch)`; the page owns the URL.
+ *
+ * Rendered twice: as a sticky sidebar from lg up, and inside a bottom-sheet
+ * Drawer on mobile. `lockedKeys` hides controls that the route already fixes
+ * (the category control on /category/:slug, for instance).
+ */
 
-  const colors = [
-    { value: "gold", label: "Gold" },
-    { value: "silver", label: "Silver" },
-    { value: "rose-gold", label: "Rose Gold" },
-    { value: "black", label: "Black" },
-    { value: "white", label: "White" },
-    { value: "red", label: "Red" },
-    { value: "blue", label: "Blue" },
-    { value: "green", label: "Green" },
-    { value: "pink", label: "Pink" },
-  ]
+const Group = ({ title, children }) => (
+  <fieldset className="border-t border-gray-100 py-5 first:border-t-0 first:pt-0">
+    <legend className="mb-3 text-sm font-semibold text-gray-900">{title}</legend>
+    {children}
+  </fieldset>
+)
 
-  const priceRanges = [
-    { value: "0-1000", label: "Under ৳1,000" },
-    { value: "1000-2000", label: "৳1,000 - ৳2,000" },
-    { value: "2000-5000", label: "৳2,000 - ৳5,000" },
-    { value: "5000-999999", label: "Above ৳5,000" },
-  ]
+/**
+ * Filter options are single-select (the API takes one value per key) but they
+ * must also be clearable, which a plain radio group can't do — clicking the
+ * checked radio again does nothing. These are radios for keyboard semantics
+ * with an onClick that toggles off when already selected.
+ */
+const OptionRow = ({ name, value, checked, onSelect, children }) => (
+  <label
+    className={cn(
+      "flex min-h-[2.25rem] cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 -mx-2",
+      "transition-colors duration-150 hover:bg-gray-50",
+      checked && "bg-pink-50/70 hover:bg-pink-50",
+    )}
+  >
+    <input
+      type="radio"
+      name={name}
+      value={value}
+      checked={checked}
+      onChange={() => onSelect(value)}
+      onClick={() => {
+        if (checked) onSelect("")
+      }}
+      className="h-4 w-4 shrink-0 border-gray-300 text-pink-600 focus:ring-2 focus:ring-pink-500 focus:ring-offset-0"
+    />
+    <span className={cn("min-w-0 flex-1 text-sm", checked ? "font-medium text-pink-900" : "text-gray-700")}>
+      {children}
+    </span>
+  </label>
+)
 
-  const updateFilter = (key, value) => {
-    const newFilters = { ...filters, [key]: value }
-    if (onFilterChange) {
-      onFilterChange(newFilters)
-    }
+const ProductFilters = ({ filters, onChange, onClear, lockedKeys = [], showClear = true, className }) => {
+  // Custom price inputs are local until submitted — firing a request on every
+  // keystroke of "1500" would issue four queries and three empty result flashes.
+  const [minPrice, setMinPrice] = useState(filters.minPrice || "")
+  const [maxPrice, setMaxPrice] = useState(filters.maxPrice || "")
 
-    // Also update URL
-    const params = new URLSearchParams(urlSearchParams)
-    if (value) {
-      params.set(key, value)
-    } else {
-      params.delete(key)
-    }
-    params.delete("page") // Reset page when filtering
-    navigate(`/products?${params.toString()}`)
+  useEffect(() => {
+    setMinPrice(filters.minPrice || "")
+    setMaxPrice(filters.maxPrice || "")
+  }, [filters.minPrice, filters.maxPrice])
+
+  const applyCustomPrice = (event) => {
+    event.preventDefault()
+    // Clearing `price` matters: the API checks the preset range first and
+    // would ignore min/max while a preset is still set.
+    onChange({ price: "", minPrice: minPrice.trim(), maxPrice: maxPrice.trim() })
   }
 
-  const clearFilters = () => {
-    const clearedFilters = {
-      category: "",
-      minPrice: "",
-      maxPrice: "",
-      search: "",
-      color: "",
-      price: "",
-    }
-    if (onFilterChange) {
-      onFilterChange(clearedFilters)
-    }
-    navigate("/products")
-  }
-
-  const hasActiveFilters = filters && Object.values(filters).some((value) => value && value !== "")
+  const customPriceDirty = minPrice !== (filters.minPrice || "") || maxPrice !== (filters.maxPrice || "")
 
   return (
-    <>
-      {/* Mobile Filter Toggle */}
-      <div className="lg:hidden mb-4">
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center justify-between w-full p-3 bg-white border border-gray-300 rounded-lg"
-        >
-          <span className="flex items-center">
-            <Filter className="h-5 w-5 mr-2" />
-            Filters
-          </span>
-          {hasActiveFilters && <span className="bg-pink-600 text-white text-xs px-2 py-1 rounded-full">Active</span>}
-        </button>
-      </div>
-
-      {/* Filter Panel */}
-      <div className={`${isOpen ? "block" : "hidden"} lg:block bg-white p-6 rounded-lg shadow-md`}>
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-          {hasActiveFilters && (
-            <button onClick={clearFilters} className="text-sm text-pink-600 hover:text-pink-700">
-              Clear All
-            </button>
-          )}
-        </div>
-
-        {/* Category Filter */}
-        <div className="mb-6">
-          <h4 className="font-medium text-gray-900 mb-3">Category</h4>
-          <div className="space-y-2">
-            {categories.map((category) => (
-              <label key={category.value} className="flex items-center">
-                <input
-                  type="radio"
-                  name="category"
-                  checked={filters?.category === category.value}
-                  onChange={(e) => updateFilter("category", e.target.checked ? category.value : "")}
-                  className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300"
-                />
-                <span className="ml-2 text-sm text-gray-700">{category.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Color Filter */}
-        <div className="mb-6">
-          <h4 className="font-medium text-gray-900 mb-3">Color</h4>
-          <div className="space-y-2">
-            {colors.map((color) => (
-              <label key={color.value} className="flex items-center">
-                <input
-                  type="radio"
-                  name="color"
-                  checked={filters?.color === color.value}
-                  onChange={(e) => updateFilter("color", e.target.checked ? color.value : "")}
-                  className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300"
-                />
-                <span className="ml-2 text-sm text-gray-700">{color.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Price Filter */}
-        <div className="mb-6">
-          <h4 className="font-medium text-gray-900 mb-3">Price Range</h4>
-          <div className="space-y-2">
-            {priceRanges.map((range) => (
-              <label key={range.value} className="flex items-center">
-                <input
-                  type="radio"
-                  name="price"
-                  checked={filters?.price === range.value}
-                  onChange={(e) => updateFilter("price", e.target.checked ? range.value : "")}
-                  className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300"
-                />
-                <span className="ml-2 text-sm text-gray-700">{range.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Search Filter */}
-        <div className="mb-6">
-          <h4 className="font-medium text-gray-900 mb-3">Search</h4>
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={filters?.search || ""}
-            onChange={(e) => updateFilter("search", e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-          />
-        </div>
-
-        {/* Mobile Close Button */}
-        <div className="lg:hidden">
+    <div className={cn("flex flex-col", className)}>
+      {showClear && (
+        <div className="flex items-center justify-between gap-3 pb-4">
+          <h2 className="text-base font-semibold text-gray-900">Filters</h2>
           <button
-            onClick={() => setIsOpen(false)}
-            className="w-full bg-pink-600 text-white py-2 px-4 rounded-lg hover:bg-pink-700 transition-colors"
+            type="button"
+            onClick={onClear}
+            className={cn(
+              "inline-flex items-center gap-1 rounded text-sm font-medium text-pink-600",
+              "transition-colors hover:text-pink-700",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
+            )}
           >
-            Apply Filters
+            <X aria-hidden="true" className="h-3.5 w-3.5" />
+            Clear all
           </button>
         </div>
-      </div>
-    </>
+      )}
+
+      {!lockedKeys.includes("category") && (
+        <Group title="Category">
+          <div className="space-y-0.5">
+            {CATEGORIES.map((category) => (
+              <OptionRow
+                key={category.slug}
+                name="category"
+                value={category.slug}
+                checked={filters.category?.toLowerCase() === category.slug}
+                onSelect={(value) => onChange({ category: value })}
+              >
+                {category.label}
+              </OptionRow>
+            ))}
+          </div>
+        </Group>
+      )}
+
+      <Group title="Colour">
+        <div className="space-y-0.5">
+          {COLORS.map((color) => (
+            <OptionRow
+              key={color.value}
+              name="color"
+              value={color.value}
+              checked={filters.color === color.value}
+              onSelect={(value) => onChange({ color: value })}
+            >
+              <span className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  style={{ backgroundColor: color.swatch }}
+                  className="h-4 w-4 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
+                />
+                {color.label}
+              </span>
+            </OptionRow>
+          ))}
+        </div>
+      </Group>
+
+      <Group title="Price">
+        <div className="space-y-0.5">
+          {PRICE_RANGES.map((range) => (
+            <OptionRow
+              key={range.value}
+              name="price"
+              value={range.value}
+              checked={filters.price === range.value}
+              // Selecting a preset clears any custom range so the two can't conflict.
+              onSelect={(value) => onChange({ price: value, minPrice: "", maxPrice: "" })}
+            >
+              {range.label}
+            </OptionRow>
+          ))}
+        </div>
+
+        <form onSubmit={applyCustomPrice} className="mt-4 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              size="sm"
+              placeholder="Min"
+              aria-label="Minimum price"
+              value={minPrice}
+              onChange={(event) => setMinPrice(event.target.value)}
+            />
+            <span aria-hidden="true" className="text-sm text-gray-400">
+              –
+            </span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              size="sm"
+              placeholder="Max"
+              aria-label="Maximum price"
+              value={maxPrice}
+              onChange={(event) => setMaxPrice(event.target.value)}
+            />
+          </div>
+
+          <Button type="submit" variant="secondary" size="sm" fullWidth disabled={!customPriceDirty}>
+            Apply price range
+          </Button>
+        </form>
+      </Group>
+
+      {/* Cross-links: quicker than opening the category group when you already
+          know where you're headed, and they give the crawler real category URLs. */}
+      {lockedKeys.includes("category") && (
+        <Group title="Other categories">
+          <ul className="flex flex-wrap gap-1.5">
+            {CATEGORIES.filter((c) => c.slug !== filters.category?.toLowerCase()).map((category) => (
+              <li key={category.slug}>
+                <Button to={categoryPath(category.slug)} variant="outline" size="xs">
+                  {category.label}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Group>
+      )}
+    </div>
   )
 }
 

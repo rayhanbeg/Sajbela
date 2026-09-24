@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Outlet, useLocation } from "react-router-dom"
 import Header from "./Header"
 import Footer from "./Footer"
@@ -7,33 +7,18 @@ import MobileMenu from "./MobileMenu"
 import SearchOverlay from "./SearchOverlay"
 import CartDrawer from "../cart/CartDrawer"
 import WhatsAppButton from "../WhatsAppButton"
+import { cn } from "../../lib/cn"
+import { StorefrontUIContext, useStorefrontUI } from "../../lib/storefrontUI"
 
 /**
  * Storefront shell: header, footer, mobile bottom nav and the three overlays
  * (menu / search / cart), plus the context that lets any page open them.
  *
- *   const { openCart } = useStorefrontUI()
- *   await addToCart(...); openCart()
+ * The context itself lives in lib/storefrontUI so leaf components can consume
+ * it without importing this module. Re-exported here for convenience.
  */
 
-const StorefrontUIContext = createContext(null)
-
-export function useStorefrontUI() {
-  const context = useContext(StorefrontUIContext)
-
-  // No-ops outside the storefront (e.g. inside the admin shell) so a shared
-  // component calling openCart() can't crash the admin panel.
-  if (!context) {
-    return {
-      openCart: () => {},
-      closeCart: () => {},
-      openSearch: () => {},
-      openMenu: () => {},
-    }
-  }
-
-  return context
-}
+export { useStorefrontUI }
 
 const StorefrontLayout = () => {
   const location = useLocation()

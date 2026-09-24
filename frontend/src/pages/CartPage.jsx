@@ -1,392 +1,469 @@
 import { useEffect, useState } from "react"
-import { useSelector, useDispatch } from "react-redux"
-import { useNavigate, Link } from "react-router-dom"
-import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react"
+import { Link, useNavigate } from "react-router-dom"
+import { useDispatch, useSelector } from "react-redux"
+import { ArrowRight, MapPin, ShieldCheck, ShoppingBag, Trash2, Truck } from "lucide-react"
+
 import { addressesAPI } from "../lib/api"
+import { cn } from "../lib/cn"
 import { formatPrice } from "../lib/utils"
+import { SHIPPING } from "../lib/navigation"
+import { cartTotals, readCartItem, totalItemCount, variantLabel } from "../lib/cart"
 import {
-  updateQuantity,
-  removeFromCart,
-  clearCart,
-  fetchCart,
-  updateCartItemAsync,
-  removeFromCartAsync,
   clearCartAsync,
+  fetchCart,
+  removeFromCartAsync,
+  updateCartItemAsync,
 } from "../lib/store/cartSlice"
+import {
+  Breadcrumbs,
+  Button,
+  EmptyState,
+  IconButton,
+  Image,
+  QuantityStepper,
+  Skeleton,
+  useConfirm,
+  useToast,
+} from "../components/ui"
+
+/**
+ * Full cart page.
+ *
+ * The old version had three `alert()`s and a `window.confirm()`, recomputed the
+ * delivery rules inline with the thresholds as bare numbers, rendered raw
+ * <img> tags with an onError fallback, and linked "Login" to `/login` — a route
+ * that doesn't exist (it's `/auth/login`), so the one prompt shown to logged-out
+ * shoppers was a dead end.
+ *
+ * It also had guest branches that dispatched `updateQuantity`/`removeFromCart`
+ * — which are aliases for the authenticated thunks, so they threw "Please login
+ * to update cart" and did nothing. Those branches are gone; the real guest cart
+ * is Phase 5 and will land in the redux slice, not here.
+ */
 
 const CartPage = () => {
-  const navigate = useNavigate()
   const dispatch = useDispatch()
-  const { items, totalAmount, loading: cartLoading } = useSelector((state) => state.cart)
+  const navigate = useNavigate()
+  const toast = useToast()
+  const confirm = useConfirm()
+
+  const { items, loading, initialized } = useSelector((state) => state.cart)
   const { isAuthenticated } = useSelector((state) => state.auth)
-  const [userAddress, setUserAddress] = useState(null)
+
+  const [address, setAddress] = useState(null)
   const [addressLoading, setAddressLoading] = useState(false)
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false)
+  // Per-row busy flag, so updating one line doesn't grey out the whole list.
+  const [busyId, setBusyId] = useState(null)
 
-  // Initialize cart data
   useEffect(() => {
-    const loadCartData = async () => {
-      if (isAuthenticated) {
-        try {
-          await dispatch(fetchCart()).unwrap()
-          await fetchUserAddress()
-        } catch (error) {
-          console.error("Failed to load cart data:", error)
-        }
-      }
-      setInitialLoadComplete(true)
+    if (!isAuthenticated) return
+    dispatch(fetchCart())
+  }, [dispatch, isAuthenticated])
+
+  // The saved address only decides which delivery rate to *preview*; checkout
+  // re-reads it from the form. A failure here is silent on purpose.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setAddress(null)
+      return
     }
 
-    if (!initialLoadComplete) {
-      loadCartData()
-    }
-  }, [isAuthenticated, initialLoadComplete, dispatch])
+    let cancelled = false
+    setAddressLoading(true)
 
-  const fetchUserAddress = async () => {
+    addressesAPI
+      .getAll()
+      .then((response) => {
+        if (cancelled) return
+        // The flag is `isDefault` — the old page checked `isPrimary`, which the
+        // Address schema has never had, so it always fell through to [0].
+        const saved = response.data || []
+        setAddress(saved.find((entry) => entry.isDefault) || saved[0] || null)
+      })
+      .catch((error) => console.error("Could not load saved address:", error))
+      .finally(() => !cancelled && setAddressLoading(false))
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated])
+
+  const lines = items || []
+  const totals = cartTotals(lines, address?.district)
+  const count = totalItemCount(lines)
+
+  const runItemAction = async (itemId, thunk, onSuccess) => {
+    setBusyId(itemId)
     try {
-      setAddressLoading(true)
-      const res = await addressesAPI.getAll()
-      const addresses = res.data || []
-      const primaryAddress = addresses.find((addr) => addr.isPrimary) || addresses[0]
-      setUserAddress(primaryAddress)
+      await dispatch(thunk).unwrap()
+      onSuccess?.()
     } catch (error) {
-      console.error("Error fetching address:", error)
+      toast.error("Something went wrong", { description: String(error) })
     } finally {
-      setAddressLoading(false)
+      setBusyId(null)
     }
   }
 
-  const calculateSubtotal = () => {
-    if (!items) return 0
-    return items.reduce((sum, item) => {
-      const product = item.product || item
-      const price = product.price || item.price || 0
-      const quantity = item.quantity || 1
-      return sum + price * quantity
-    }, 0)
+  const handleQuantity = (itemId, quantity) => {
+    runItemAction(itemId, updateCartItemAsync({ itemId, quantity }))
   }
 
-  const calculateShippingCost = (subtotal, address) => {
-    if (subtotal >= 2000) return 0
-    if (address?.district?.toLowerCase() === "dhaka") return 60
-    return 120
+  const handleRemove = (itemId, name) => {
+    runItemAction(itemId, removeFromCartAsync(itemId), () =>
+      toast.success("Removed from cart", { description: name }),
+    )
   }
 
-  const getShippingLocation = (address) => {
-    if (address?.district?.toLowerCase() === "dhaka") return "Inside Dhaka"
-    return "Outside Dhaka"
+  const handleClear = async () => {
+    const ok = await confirm({
+      title: "Empty your cart?",
+      message: `This removes all ${count} ${count === 1 ? "item" : "items"}. You can always add them again.`,
+      confirmLabel: "Empty cart",
+      tone: "danger",
+      onConfirm: () => dispatch(clearCartAsync()).unwrap(),
+    })
+
+    if (ok) toast.success("Cart emptied")
   }
 
-  const handleQuantityChange = async (item, newQuantity) => {
-    try {
-      if (isAuthenticated) {
-        if (newQuantity <= 0) {
-          await dispatch(removeFromCartAsync(item._id)).unwrap()
-        } else {
-          await dispatch(updateCartItemAsync({ itemId: item._id, quantity: newQuantity })).unwrap()
-        }
-      } else {
-        if (newQuantity <= 0) {
-          dispatch(removeFromCart(item._id))
-        } else {
-          dispatch(updateQuantity({ id: item._id, quantity: newQuantity }))
-        }
-      }
-    } catch (error) {
-      console.error("Failed to update quantity:", error)
-      alert("Failed to update quantity. Please try again.")
-    }
+  /* ── Loading ──────────────────────────────────────────────── */
+  if (isAuthenticated && !initialized && loading) {
+    return <CartSkeleton />
   }
 
-  const handleRemoveItem = async (item) => {
-    try {
-      if (isAuthenticated) {
-        await dispatch(removeFromCartAsync(item._id)).unwrap()
-      } else {
-        dispatch(removeFromCart(item._id))
-      }
-    } catch (error) {
-      console.error("Failed to remove item:", error)
-      alert("Failed to remove item. Please try again.")
-    }
-  }
-
-  const handleClearCart = async () => {
-    try {
-      if (window.confirm("Are you sure you want to clear your cart?")) {
-        if (isAuthenticated) {
-          await dispatch(clearCartAsync()).unwrap()
-        } else {
-          dispatch(clearCart())
-        }
-      }
-    } catch (error) {
-      console.error("Failed to clear cart:", error)
-      alert("Failed to clear cart. Please try again.")
-    }
-  }
-
-  const getImageUrl = (item) => {
-    if (item.product) {
-      if (item.product.images && item.product.images.length > 0) {
-        return item.product.images[0].url || "/placeholder.svg"
-      }
-      return item.product.image || "/placeholder.svg"
-    }
-
-    if (item.images && item.images.length > 0) {
-      return item.images[0].url || "/placeholder.svg"
-    }
-    return item.image || "/placeholder.svg"
-  }
-
-  const getProductName = (item) => {
-    return item.product?.name || item.name || "Unknown Product"
-  }
-
-  const getProductPrice = (item) => {
-    return item.price || item.product?.price || 0
-  }
-
-  const subtotal = calculateSubtotal()
-  const shippingCost = calculateShippingCost(subtotal, userAddress)
-  const finalTotal = subtotal + shippingCost
-
-  if (cartLoading && !initialLoadComplete) {
+  /* ── Empty ────────────────────────────────────────────────── */
+  if (lines.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Cart Items Skeleton */}
-            <div className="lg:col-span-2 space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="bg-white p-6 rounded-lg shadow-md">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-20 h-20 bg-gray-200 rounded-lg animate-pulse"></div>
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                      <div className="h-4 bg-gray-200 rounded w-2/3 animate-pulse"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/2 animate-pulse"></div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
-                      <div className="w-8 h-6 bg-gray-200 rounded animate-pulse"></div>
-                      <div className="w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
-                    </div>
-                    <div className="text-right space-y-2">
-                      <div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div>
-                      <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+      <div className="bg-gray-50">
+        <PageHeader count={0} />
+        <div className="page-container pb-16 pt-4">
+          {isAuthenticated ? (
+            <EmptyState
+              icon={<ShoppingBag />}
+              title="Your cart is empty"
+              description="Nothing here yet. Browse the collections and add something you love."
+              action={<Button to="/products" size="lg">Start shopping</Button>}
+              secondaryAction={<Button to="/" variant="ghost">Back to home</Button>}
+              className="rounded-card border border-gray-100 bg-white shadow-card"
+            />
+          ) : (
+            <EmptyState
+              icon={<ShoppingBag />}
+              title="Sign in to see your cart"
+              description="Your cart is saved to your account, so it's waiting for you on any device."
+              action={<Button to="/auth/login" size="lg">Sign in</Button>}
+              secondaryAction={<Button to="/products" variant="ghost">Continue shopping</Button>}
+              className="rounded-card border border-gray-100 bg-white shadow-card"
+            />
+          )}
+        </div>
+      </div>
+    )
+  }
 
-            {/* Order Summary Skeleton */}
-            <div className="lg:col-span-1">
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <div className="h-6 bg-gray-200 rounded animate-pulse mb-4"></div>
-                <div className="space-y-3 mb-4">
-                  <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                  <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                  <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                </div>
-                <div className="h-12 bg-gray-200 rounded animate-pulse mb-3"></div>
-                <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
+  /* ── Cart ─────────────────────────────────────────────────── */
+  return (
+    <div className="bg-gray-50">
+      <PageHeader
+        count={count}
+        action={
+          <Button variant="ghost" size="sm" onClick={handleClear} disabled={loading} className="text-gray-500">
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+            Empty cart
+          </Button>
+        }
+      />
+
+      <div className="page-container pb-8 pt-4 md:pb-14">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-8 xl:grid-cols-[minmax(0,1fr)_23rem]">
+          {/* ── Line items ─────────────────────────────────── */}
+          <div className="space-y-4">
+            <FreeDeliveryMeter totals={totals} />
+
+            <ul className="divide-y divide-gray-100 overflow-hidden rounded-card border border-gray-100 bg-white shadow-card">
+              {lines.map((item) => {
+                const line = readCartItem(item)
+                const variant = variantLabel(item)
+                const busy = busyId === line.id
+
+                return (
+                  <li key={line.id} className={cn("p-4 transition-opacity sm:p-5", busy && "opacity-60")}>
+                    <div className="flex gap-4">
+                      <Link
+                        to={`/products/${line.productId}`}
+                        className="shrink-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                      >
+                        <Image
+                          src={line.image}
+                          alt=""
+                          aspect="square"
+                          width={200}
+                          sizes="96px"
+                          rounded="rounded-lg"
+                          className="w-20 sm:w-24"
+                        />
+                      </Link>
+
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h2 className="text-sm font-semibold leading-snug text-gray-900 sm:text-base">
+                              <Link
+                                to={`/products/${line.productId}`}
+                                className="transition-colors hover:text-pink-600 focus:outline-none focus-visible:underline"
+                              >
+                                {line.name}
+                              </Link>
+                            </h2>
+
+                            {variant && <p className="mt-1 text-xs text-gray-500 sm:text-sm">{variant}</p>}
+
+                            <p className="mt-1 text-xs text-gray-500 sm:hidden">{formatPrice(line.price)} each</p>
+                          </div>
+
+                          <IconButton
+                            label={`Remove ${line.name} from cart`}
+                            variant="danger"
+                            size="xs"
+                            disabled={busy}
+                            onClick={() => handleRemove(line.id, line.name)}
+                            className="-mr-1 shrink-0"
+                          >
+                            <Trash2 />
+                          </IconButton>
+                        </div>
+
+                        <p className="mt-1 hidden text-sm text-gray-500 sm:block">{formatPrice(line.price)} each</p>
+
+                        <div className="mt-auto flex items-end justify-between gap-3 pt-3">
+                          <QuantityStepper
+                            size="sm"
+                            value={line.quantity}
+                            min={1}
+                            max={99}
+                            loading={busy}
+                            onChange={(quantity) => handleQuantity(line.id, quantity)}
+                            label={`Quantity of ${line.name}`}
+                          />
+
+                          <p className="text-base font-bold text-gray-900 tabular-nums sm:text-lg">
+                            {formatPrice(line.price * line.quantity)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+
+            <div className="hidden lg:block">
+              <Button to="/products" variant="ghost" className="text-gray-600">
+                Continue shopping
+              </Button>
+            </div>
+          </div>
+
+          {/* ── Summary ────────────────────────────────────── */}
+          <aside className="lg:sticky lg:top-24">
+            <div className="overflow-hidden rounded-card border border-gray-100 bg-white shadow-card">
+              <h2 className="border-b border-gray-100 px-5 py-4 text-base font-semibold text-gray-900">
+                Order summary
+              </h2>
+
+              <div className="space-y-4 p-5">
+                <DeliveryTo address={address} loading={addressLoading} authenticated={isAuthenticated} />
+
+                <dl className="space-y-2.5 text-sm">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-gray-600">
+                      Subtotal <span className="text-gray-400">({count} {count === 1 ? "item" : "items"})</span>
+                    </dt>
+                    <dd className="font-medium text-gray-900 tabular-nums">{formatPrice(totals.subtotal)}</dd>
+                  </div>
+
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-gray-600">Delivery{totals.zone ? ` (${totals.zone})` : ""}</dt>
+                    <dd
+                      className={cn(
+                        "font-medium tabular-nums",
+                        totals.shipping === 0 ? "text-green-600" : "text-gray-900",
+                      )}
+                    >
+                      {totals.shipping === 0 ? "Free" : formatPrice(totals.shipping)}
+                    </dd>
+                  </div>
+
+                  <div className="flex items-baseline justify-between gap-4 border-t border-gray-100 pt-3">
+                    <dt className="text-base font-semibold text-gray-900">Total</dt>
+                    <dd className="text-xl font-bold text-gray-900 tabular-nums">{formatPrice(totals.total)}</dd>
+                  </div>
+                </dl>
+
+                {totals.estimated && (
+                  <p className="text-xs leading-relaxed text-gray-500">
+                    Delivery is estimated at the outside-Dhaka rate. Add your address at checkout for the exact charge.
+                  </p>
+                )}
+
+                <Button fullWidth size="lg" onClick={() => navigate("/checkout")}>
+                  Proceed to checkout
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                </Button>
+
+                <ul className="space-y-2 border-t border-gray-100 pt-4 text-xs text-gray-600">
+                  <li className="flex items-center gap-2">
+                    <ShieldCheck aria-hidden="true" className="h-4 w-4 shrink-0 text-green-600" />
+                    Cash on delivery available
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Truck aria-hidden="true" className="h-4 w-4 shrink-0 text-pink-600" />
+                    Free delivery over {formatPrice(SHIPPING.freeThreshold)}
+                  </li>
+                </ul>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
-  // Show empty cart message when cart is empty and loading is complete
-  if (initialLoadComplete && (!items || items.length === 0)) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="text-center">
-            <ShoppingBag className="h-24 w-24 text-gray-300 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Your cart is empty</h1>
-            <p className="text-gray-600 mb-8">Add some products to get started!</p>
-            <Link
-              to="/products"
-              className="inline-flex items-center px-6 py-3 bg-pink-600 text-white font-medium rounded-lg hover:bg-pink-700 transition-colors"
-            >
-              Continue Shopping
-            </Link>
-          </div>
+            <div className="mt-4 text-center lg:hidden">
+              <Button to="/products" variant="ghost" className="text-gray-600">
+                Continue shopping
+              </Button>
+            </div>
+          </aside>
         </div>
       </div>
-    )
-  }
+
+      {/* ── Mobile checkout bar ─────────────────────────────── */}
+      {/* Parked above the bottom nav (h-16) rather than over it. */}
+      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-40 flex items-center gap-3 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-nav backdrop-blur-lg lg:hidden">
+        <div className="min-w-0">
+          <p className="text-[0.6875rem] uppercase tracking-wide text-gray-500">Total</p>
+          <p className="text-lg font-bold leading-tight text-gray-900 tabular-nums">{formatPrice(totals.total)}</p>
+        </div>
+        <Button size="lg" className="ml-auto flex-1" onClick={() => navigate("/checkout")}>
+          Checkout
+          <ArrowRight aria-hidden="true" className="h-4 w-4" />
+        </Button>
+      </div>
+      <div aria-hidden="true" className="h-20 lg:hidden" />
+    </div>
+  )
+}
+
+/* ── Pieces ─────────────────────────────────────────────────── */
+
+const PageHeader = ({ count, action }) => (
+  <div className="border-b border-gray-100 bg-white">
+    <div className="page-container py-4 md:py-5">
+      <Breadcrumbs items={[{ label: "Cart" }]} className="mb-3" />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold text-gray-900 md:text-2xl">
+          Shopping cart
+          {count > 0 && (
+            <span className="ml-2 text-base font-normal text-gray-500">
+              ({count} {count === 1 ? "item" : "items"})
+            </span>
+          )}
+        </h1>
+        {action}
+      </div>
+    </div>
+  </div>
+)
+
+/** Progress towards the free-delivery threshold — mirrors the cart drawer. */
+const FreeDeliveryMeter = ({ totals }) => (
+  <div className="rounded-card border border-pink-100 bg-pink-50/60 px-4 py-3.5">
+    {totals.hasFreeShipping ? (
+      <p className="flex items-center gap-2 text-sm font-semibold text-green-700">
+        <Truck aria-hidden="true" className="h-4 w-4 shrink-0" />
+        You&rsquo;ve unlocked free delivery
+      </p>
+    ) : (
+      <p className="text-sm text-gray-700">
+        Add <span className="font-semibold text-pink-700">{formatPrice(totals.freeShippingRemaining)}</span> more to get
+        free delivery
+      </p>
+    )}
+
+    <div
+      role="progressbar"
+      aria-valuenow={Math.round(totals.freeShippingProgress)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label="Progress towards free delivery"
+      className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-pink-100"
+    >
+      <div
+        className={cn(
+          "h-full rounded-full transition-[width] duration-500 ease-out-expo",
+          totals.hasFreeShipping ? "bg-green-500" : "bg-pink-600",
+        )}
+        style={{ width: `${totals.freeShippingProgress}%` }}
+      />
+    </div>
+  </div>
+)
+
+const DeliveryTo = ({ address, loading, authenticated }) => {
+  if (!authenticated) return null
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Shopping Cart</h1>
-          <button
-            onClick={handleClearCart}
-            className="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
-            disabled={cartLoading}
-          >
-            Clear Cart
-          </button>
-        </div>
+    <div className="flex items-start gap-2.5 rounded-lg bg-gray-50 px-3 py-2.5">
+      <MapPin aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Cart Items */}
-          <div className="lg:col-span-2 space-y-4">
-            {items.map((item) => (
-              <div key={item._id} className="bg-white p-6 rounded-lg shadow-md">
-                <div className="flex items-center space-x-4">
-                  <img
-                    src={getImageUrl(item) || "/placeholder.svg"}
-                    alt={getProductName(item)}
-                    className="w-20 h-20 object-cover rounded-lg"
-                    onError={(e) => {
-                      e.target.src = "/placeholder.svg"
-                    }}
-                  />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{getProductName(item)}</h3>
-                    <p className="text-gray-600">{formatPrice(getProductPrice(item))}</p>
-                    {item.selectedSize && <p className="text-sm text-gray-500">Size: {item.selectedSize}</p>}
-                    {item.selectedColor && <p className="text-sm text-gray-500">Color: {item.selectedColor}</p>}
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleQuantityChange(item, item.quantity - 1)}
-                      className="p-1 hover:bg-gray-100 rounded disabled:opacity-50"
-                      disabled={cartLoading}
-                    >
-                      <Minus className="h-4 w-4" />
-                    </button>
-                    <span className="w-8 text-center">{item.quantity}</span>
-                    <button
-                      onClick={() => handleQuantityChange(item, item.quantity + 1)}
-                      className="p-1 hover:bg-gray-100 rounded disabled:opacity-50"
-                      disabled={cartLoading}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-gray-900">{formatPrice(getProductPrice(item) * item.quantity)}</p>
-                    <button
-                      onClick={() => handleRemoveItem(item)}
-                      className="text-red-600 hover:text-red-700 mt-1 disabled:opacity-50"
-                      disabled={cartLoading}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+      <div className="min-w-0 flex-1 text-sm">
+        <p className="font-medium text-gray-700">Delivering to</p>
+
+        {loading ? (
+          <Skeleton className="mt-1 h-3.5 w-28" rounded="rounded" />
+        ) : address ? (
+          <p className="truncate text-gray-600">
+            {[address.thana, address.district].filter(Boolean).join(", ")}
+          </p>
+        ) : (
+          <Link to="/account" className="font-medium text-pink-600 underline-offset-2 hover:underline">
+            Add a delivery address
+          </Link>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const CartSkeleton = () => (
+  <div className="bg-gray-50">
+    <PageHeader count={0} />
+
+    <div className="page-container pb-14 pt-4">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-8 xl:grid-cols-[minmax(0,1fr)_23rem]">
+        <div className="space-y-4">
+          <Skeleton className="h-[4.75rem] w-full" rounded="rounded-card" />
+
+          <div className="divide-y divide-gray-100 overflow-hidden rounded-card border border-gray-100 bg-white shadow-card">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex gap-4 p-4 sm:p-5">
+                <Skeleton className="h-20 w-20 shrink-0 sm:h-24 sm:w-24" />
+                <div className="flex-1 space-y-2.5">
+                  <Skeleton className="h-4 w-3/4" rounded="rounded" />
+                  <Skeleton className="h-3 w-1/3" rounded="rounded" />
+                  <div className="flex items-center justify-between pt-3">
+                    <Skeleton className="h-9 w-28" />
+                    <Skeleton className="h-5 w-20" rounded="rounded" />
                   </div>
                 </div>
               </div>
             ))}
           </div>
-
-          {/* Order Summary */}
-          <div className="lg:col-span-1">
-            <div className="bg-white p-6 rounded-lg shadow-md sticky top-4">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Order Summary</h2>
-
-              {/* Shipping Information */}
-              {isAuthenticated && (
-                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">Shipping to:</span>
-                    {addressLoading ? (
-                      <div className="animate-pulse h-4 w-20 bg-gray-300 rounded"></div>
-                    ) : userAddress ? (
-                      <span className="text-sm text-gray-600">
-                        {userAddress.district}, {userAddress.thana}
-                      </span>
-                    ) : (
-                      <Link to="/account" className="text-sm text-pink-600 hover:text-pink-700">
-                        Add Address
-                      </Link>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Dhaka: ৳60 | Outside Dhaka: ৳120 | Free shipping on orders ৳2000+
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">{formatPrice(subtotal)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Shipping ({getShippingLocation(userAddress)})</span>
-                  <span className="font-medium">{shippingCost === 0 ? "Free" : formatPrice(shippingCost)}</span>
-                </div>
-                {shippingCost === 0 ? (
-                  <p className="text-xs text-green-600 mt-1">🎉 Free shipping on orders above ৳2000!</p>
-                ) : (
-                  <p className="text-xs text-gray-500 mt-1">
-                    {userAddress?.district?.toLowerCase() === "dhaka"
-                      ? "Shipping (Inside Dhaka): ৳60"
-                      : "Shipping (Outside Dhaka): ৳120"}
-                  </p>
-                )}
-                <div className="border-t pt-2">
-                  <div className="flex justify-between">
-                    <span className="text-lg font-semibold">Total</span>
-                    <span className="text-lg font-semibold">{formatPrice(finalTotal)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {subtotal >= 2000 && (
-                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-800">🎉 You qualify for free shipping!</p>
-                </div>
-              )}
-
-              {subtotal < 2000 && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    💡 Add {formatPrice(2000 - subtotal)} more to get free shipping!
-                  </p>
-                </div>
-              )}
-
-              {!isAuthenticated && (
-                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-yellow-800">
-                    💡{" "}
-                    <Link to="/login" className="underline">
-                      Login
-                    </Link>{" "}
-                    to see accurate shipping costs based on your address
-                  </p>
-                </div>
-              )}
-
-              <Link
-                to="/checkout"
-                className="w-full bg-pink-600 text-white py-3 px-4 rounded-lg hover:bg-pink-700 transition-colors text-center block font-medium"
-              >
-                Proceed to Checkout
-              </Link>
-
-              <Link
-                to="/products"
-                className="w-full border border-gray-300 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-50 transition-colors text-center block font-medium mt-3"
-              >
-                Continue Shopping
-              </Link>
-            </div>
-          </div>
         </div>
+
+        <Skeleton className="h-96 w-full" rounded="rounded-card" />
       </div>
     </div>
-  )
-}
+  </div>
+)
 
 export default CartPage

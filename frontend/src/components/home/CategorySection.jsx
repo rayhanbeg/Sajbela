@@ -1,88 +1,95 @@
 import { Link } from "react-router-dom"
+import { Circle, Gem, Gift, Heart, Palette, Shirt, Sparkles } from "lucide-react"
+
+import { CATEGORIES, categoryPath } from "../../lib/navigation"
+import { cn } from "../../lib/cn"
+import { SectionHeader } from "../ui"
+
+/**
+ * Shop-by-category tiles.
+ *
+ * Reads CATEGORIES from lib/navigation instead of keeping its own copy of the
+ * list (this file, Header, ProductFilters and Footer all had separate copies),
+ * and links to the canonical /category/:slug route rather than a query string.
+ *
+ * The emoji icons were swapped for lucide glyphs — emoji render at different
+ * sizes and weights on Android, iOS and Windows, so the tiles never lined up.
+ */
+
+const ICONS = {
+  bangles: Circle,
+  earrings: Sparkles,
+  cosmetics: Palette,
+  necklaces: Heart,
+  rings: Gem,
+  alna: Shirt,
+  combo: Gift,
+}
 
 const CategorySection = () => {
-  const categories = [
-    {
-      name: "Bangles",
-      icon: "💍",
-      link: "/products?category=bangles",
-      color: "from-pink-500 to-rose-500",
-    },
-    {
-      name: "Earrings",
-      icon: "✨",
-      link: "/products?category=earrings",
-      color: "from-purple-500 to-indigo-500",
-    },
-    {
-      name: "Cosmetics",
-      icon: "💄",
-      link: "/products?category=cosmetics",
-      color: "from-blue-500 to-cyan-500",
-    },
-    {
-      name: "Necklaces",
-      icon: "📿",
-      link: "/products?category=necklaces",
-      color: "from-emerald-500 to-teal-500",
-    },
-    {
-      name: "Rings",
-      icon: "💎",
-      link: "/products?category=rings",
-      color: "from-orange-500 to-red-500",
-    },
-    {
-      name: "Alna",
-      icon: "🌟",
-      link: "/products?category=alna",
-      color: "from-yellow-500 to-amber-500",
-    },
-    {
-      name: "Combo",
-      icon: "🎁",
-      link: "/products?category=combo",
-      color: "from-violet-500 to-purple-500",
-    },
-  ]
-
   return (
-    <section className="py-8 md:py-12 bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 lg:px-8">
-        <div className="text-center mb-6 md:mb-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Shop by Category</h2>
-          <p className="text-gray-600">Explore our curated collections</p>
-        </div>
+    <section className="bg-gray-50 py-10 md:py-14">
+      <div className="page-container">
+        <SectionHeader
+          eyebrow="Browse"
+          title="Shop by category"
+          description="Seven collections, curated by hand."
+          actionLabel="View all products"
+          actionTo="/products"
+        />
 
-        {/* Grid Layout - Responsive for 7 items */}
-        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 md:gap-4 max-w-5xl mx-auto">
-          {categories.map((category, index) => (
-            <Link
-              key={index}
-              to={category.link}
-              className="group flex flex-col items-center p-3 md:p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 transform hover:-translate-y-1"
-            >
-              <div
-                className={`w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-r ${category.color} flex items-center justify-center text-lg md:text-2xl mb-2 md:mb-3 group-hover:scale-110 transition-transform duration-300`}
-              >
-                {category.icon}
-              </div>
-              <h3 className="text-xs md:text-sm font-semibold text-gray-900 text-center leading-tight">
-                {category.name}
-              </h3>
-            </Link>
-          ))}
-        </div>
+        {/*
+          Mobile is a snap rail rather than a grid: seven items in a 3- or
+          4-column grid always leaves an orphan row, and tiles small enough to
+          avoid that stop being comfortable 44px touch targets.
+        */}
+        <ul
+          className={cn(
+            "-mx-4 flex snap-x-mandatory gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide",
+            "sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0 sm:pb-0",
+            "lg:grid-cols-7 lg:gap-4",
+          )}
+        >
+          {CATEGORIES.map((category) => {
+            const Icon = ICONS[category.slug] || Circle
 
-        {/* View All Button */}
-        <div className="text-center mt-6 md:mt-8">
-          <Link
-            to="/products"
-            className="inline-flex items-center px-6 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors duration-300 text-sm font-medium"
-          >
-            View All Products
-          </Link>
-        </div>
+            return (
+              <li key={category.slug} className="w-[5.75rem] shrink-0 snap-start-always sm:w-auto">
+                <Link
+                  to={categoryPath(category.slug)}
+                  className={cn(
+                    "group flex h-full flex-col items-center gap-2 rounded-card border border-transparent bg-white p-3 text-center",
+                    "shadow-card transition-all duration-300 ease-out-expo",
+                    "hover:-translate-y-1 hover:border-pink-100 hover:shadow-card-hover",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
+                    "md:p-4",
+                  )}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br text-white",
+                      "transition-transform duration-300 ease-out-expo group-hover:scale-110",
+                      "md:h-14 md:w-14",
+                      category.accent,
+                    )}
+                  >
+                    <Icon className="h-5 w-5 md:h-6 md:w-6" strokeWidth={2} />
+                  </span>
+
+                  <span className="text-xs font-semibold leading-tight text-gray-900 transition-colors group-hover:text-pink-600 md:text-sm">
+                    {category.label}
+                  </span>
+
+                  {/* Taglines are extra context, not essential — hidden where space is tight. */}
+                  <span className="hidden text-[0.6875rem] leading-tight text-gray-500 lg:block">
+                    {category.tagline}
+                  </span>
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
       </div>
     </section>
   )

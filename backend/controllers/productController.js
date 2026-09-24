@@ -21,23 +21,39 @@ export const getProducts = async (req, res) => {
       console.log("❌ No category filter applied")
     }
 
+    /*
+     * Search and colour each need an $or. Assigning both to `query.$or`
+     * meant the second one silently overwrote the first — searching "gold
+     * bangle" and then filtering by colour dropped the search term entirely.
+     * Collect them and combine under $and so both apply.
+     */
+    const orConditions = []
+
     // Search filter
     if (search && search.trim() !== "") {
-      query.$or = [
-        { name: { $regex: search.trim(), $options: "i" } },
-        { description: { $regex: search.trim(), $options: "i" } },
-        { tags: { $in: [new RegExp(search.trim(), "i")] } },
-      ]
-      console.log("✅ Search filter applied:", query.$or)
+      orConditions.push({
+        $or: [
+          { name: { $regex: search.trim(), $options: "i" } },
+          { description: { $regex: search.trim(), $options: "i" } },
+          { tags: { $in: [new RegExp(search.trim(), "i")] } },
+        ],
+      })
+      console.log("✅ Search filter applied:", search.trim())
     }
 
     // Color filter
     if (color && color.trim() !== "") {
-      query.$or = [
-        { "colors.name": { $regex: new RegExp(color.trim(), "i") } },
-        { color: { $regex: new RegExp(color.trim(), "i") } },
-      ]
-      console.log("✅ Color filter applied:", query.$or)
+      orConditions.push({
+        $or: [
+          { "colors.name": { $regex: new RegExp(color.trim(), "i") } },
+          { color: { $regex: new RegExp(color.trim(), "i") } },
+        ],
+      })
+      console.log("✅ Color filter applied:", color.trim())
+    }
+
+    if (orConditions.length > 0) {
+      query.$and = orConditions
     }
 
     // Price range filter

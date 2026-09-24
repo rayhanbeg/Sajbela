@@ -1,174 +1,231 @@
-import { Link, useNavigate } from "react-router-dom"
-import { useDispatch, useSelector } from "react-redux"
-import { addToCartAsync } from "../../lib/store/cartSlice"
-import { formatPrice } from "../../lib/utils"
 import { useState } from "react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
+import { useDispatch } from "react-redux"
+import { ShoppingBag, SlidersHorizontal } from "lucide-react"
 
-const ProductCard = ({ product }) => {
+import { addToCartAsync, fetchCart } from "../../lib/store/cartSlice"
+import { cn } from "../../lib/cn"
+import { Badge, Image, Price, Rating, Spinner, getDiscount, useToast } from "../ui"
+import { useStorefrontUI } from "../../lib/storefrontUI"
+
+/**
+ * The product card. One implementation, used by every grid and carousel on the
+ * site — the home sections, the shop page and the "related products" rail all
+ * previously inlined their own near-identical copy, which is why the NEW badge
+ * showed on featured products that weren't new and the stars rendered as text
+ * glyphs in some places and not others.
+ *
+ * Accessibility note: the old card nested an add-to-cart <button> inside the
+ * card's <Link>, which is invalid HTML and made the button unreachable for
+ * some screen readers. Here the title is the only link, and it stretches over
+ * the whole card via `after:absolute after:inset-0`; the button sits above it
+ * on the z-axis. Result: one link, one button, whole card still clickable.
+ */
+
+/** Variant products can't be added from a grid — you have to pick a size/colour first. */
+function needsVariantChoice(product) {
+  if (product.category === "bangles") return true
+  if (product.colors?.length > 0) return true
+  if (product.sizes?.length > 0) return true
+  return false
+}
+
+/** Mirrors the backend's per-variant stock model. */
+function isAvailable(product) {
+  if (product.category === "bangles" && product.sizes?.length) {
+    return product.sizes.some((size) => size.available && size.stock > 0)
+  }
+  if (product.colors?.length) {
+    return product.colors.some((color) => color.available && color.stock > 0)
+  }
+  return Boolean(product.inStock) && Number(product.stock) > 0
+}
+
+const ProductCard = ({ product, priority = false, sizes, className }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const { loading } = useSelector((state) => state.cart)
-  const { user, isAuthenticated } = useSelector((state) => state.auth)
-  const [isHovered, setIsHovered] = useState(false)
+  const location = useLocation()
+  const toast = useToast()
+  const { openCart } = useStorefrontUI()
 
-  const handleAddToCart = async (e) => {
-    e.preventDefault()
-    e.stopPropagation()
+  // Local, not the shared cart.loading flag — that one is global, so a single
+  // add-to-cart used to put every card on the page into a loading state.
+  const [pending, setPending] = useState(false)
+  const [hovered, setHovered] = useState(false)
 
-    if (!isAuthenticated) {
-      // Redirect to login with return path
-      const currentPath = window.location.pathname
-      navigate(`/auth/login?returnTo=${encodeURIComponent(currentPath)}`)
+  const href = `/products/${product._id}`
+  const available = isAvailable(product)
+  const variantChoice = needsVariantChoice(product)
+  const discount = getDiscount(product.price, product.originalPrice)
+
+  const primaryImage = product.images?.[0]?.url || product.image
+  const secondImage = product.images?.[1]?.url
+
+  const handleAction = async (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    // Send shoppers to the detail page to choose a variant.
+    if (variantChoice) {
+      navigate(href)
       return
     }
 
-    // For bangles or products with colors/sizes, redirect to product detail page
-    if (
-      product.category === "bangles" ||
-      (product.colors && product.colors.length > 0) ||
-      (product.sizes && product.sizes.length > 0)
-    ) {
-      navigate(`/products/${product._id}`)
-      return
-    }
-
-    // For simple products, add directly to cart
+    setPending(true)
     try {
-      await dispatch(
-        addToCartAsync({
-          productId: product._id,
-          quantity: 1,
-        }),
-      ).unwrap()
+      await dispatch(addToCartAsync({ productId: product._id, quantity: 1 })).unwrap()
+      toast.success(`${product.name} added to your cart`)
+      openCart()
     } catch (error) {
-      console.error("Failed to add to cart:", error)
+      const message = typeof error === "string" ? error : error?.message || "Could not add to cart"
+
+      // Guests are bounced to login for now; Phase 5 gives them a local cart.
+      if (/login/i.test(message)) {
+        navigate(`/auth/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`)
+        return
+      }
+
+      toast.error(message)
+      // Re-sync in case the failure was a stale local quantity.
+      dispatch(fetchCart())
+    } finally {
+      setPending(false)
     }
-  }
-
-  const renderStars = (rating) => {
-    const stars = []
-    const fullStars = Math.floor(rating)
-    const hasHalfStar = rating % 1 !== 0
-
-    for (let i = 0; i < fullStars; i++) {
-      stars.push(
-        <span key={i} className="text-yellow-400">
-          ★
-        </span>,
-      )
-    }
-
-    if (hasHalfStar) {
-      stars.push(
-        <span key="half" className="text-yellow-400">
-          ☆
-        </span>,
-      )
-    }
-
-    const emptyStars = 5 - Math.ceil(rating)
-    for (let i = 0; i < emptyStars; i++) {
-      stars.push(
-        <span key={`empty-${i}`} className="text-gray-300">
-          ★
-        </span>,
-      )
-    }
-
-    return stars
-  }
-
-  // Get the first image URL or use placeholder
-  const getImageUrl = (index = 0) => {
-    if (product.images && product.images.length > 0) {
-      return product.images[index]?.url || product.images[0]?.url || "/placeholder.svg"
-    }
-    return product.image || "/placeholder.svg"
-  }
-
-  const hasMultipleImages = product.images && product.images.length > 1
-
-  // Check if product is available
-  const isAvailable = () => {
-    if (product.category === "bangles" && product.sizes) {
-      return product.sizes.some((size) => size.available && size.stock > 0)
-    }
-    if (product.colors && product.colors.length > 0) {
-      return product.colors.some((color) => color.available && color.stock > 0)
-    }
-    return product.inStock && product.stock > 0
-  }
-
-  const getButtonText = () => {
-    if (!isAvailable()) return "Not Available"
-    if (product.category === "bangles") return "Select Size"
-    if (product.colors && product.colors.length > 0) return "Select Options"
-    return "Add to Cart"
   }
 
   return (
-    <Link to={`/products/${product._id}`} className="group">
-      <div className="card hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-        <div
-          className="relative overflow-hidden"
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-        >
-          <img
-            src={isHovered && hasMultipleImages ? getImageUrl(1) : getImageUrl(0)}
-            alt={product.name}
-            className="w-full h-64 object-cover group-hover:scale-105 transition-all duration-500 ease-in-out"
-          />
-          {hasMultipleImages && (
-            <div className="absolute bottom-2 left-2">
-              <div className="flex space-x-1">
-                <div
-                  className={`w-2 h-2 rounded-full transition-colors duration-300 ${!isHovered ? "bg-white" : "bg-white/50"}`}
-                ></div>
-                <div
-                  className={`w-2 h-2 rounded-full transition-colors duration-300 ${isHovered ? "bg-white" : "bg-white/50"}`}
-                ></div>
-              </div>
-            </div>
+    <article
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={cn(
+        "group relative flex h-full flex-col overflow-hidden rounded-card border border-gray-100 bg-white",
+        "shadow-card transition-all duration-300 ease-out-expo",
+        "hover:-translate-y-1 hover:border-pink-100 hover:shadow-card-hover",
+        className,
+      )}
+    >
+      <div className="relative overflow-hidden bg-gray-50">
+        <Image
+          src={primaryImage}
+          alt={product.name}
+          aspect="square"
+          priority={priority}
+          sizes={sizes}
+          imgClassName={cn(
+            "transition-transform duration-500 ease-out-expo group-hover:scale-105",
+            secondImage && hovered && "opacity-0",
           )}
-          <div className="absolute top-4 right-4">
-            <button className="bg-white p-2 rounded-full shadow-md hover:bg-gray-50 transition-colors">❤️</button>
-          </div>
-          {/* Availability Badge */}
-          <div className="absolute top-4 left-4">
-            <span
-              className={`px-2 py-1 text-xs font-medium rounded-full ${
-                isAvailable() ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-              }`}
-            >
-              {isAvailable() ? "Available" : "Not Available"}
-            </span>
-          </div>
+        />
+
+        {/*
+          Second image crossfades on top rather than swapping the first one's
+          src — swapping caused a blank flash while the new file downloaded.
+        */}
+        {secondImage && (
+          <Image
+            src={secondImage}
+            alt=""
+            aria-hidden="true"
+            aspect="square"
+            sizes={sizes}
+            className={cn(
+              "absolute inset-0 transition-opacity duration-500 ease-in-out-smooth",
+              hovered ? "opacity-100" : "opacity-0",
+            )}
+            imgClassName="scale-105"
+          />
+        )}
+
+        <div className="pointer-events-none absolute left-2 top-2 flex flex-col items-start gap-1.5 md:left-3 md:top-3">
+          {discount && (
+            <Badge tone="danger-solid" size="sm">
+              {discount.percent}% off
+            </Badge>
+          )}
+          {product.isNewArrival && (
+            <Badge tone="brand-solid" size="sm">
+              New
+            </Badge>
+          )}
+          {product.isCombo && (
+            <Badge tone="info" size="sm">
+              Combo
+            </Badge>
+          )}
         </div>
 
-        <div className="p-4">
-          <h3 className="font-semibold text-gray-900 mb-2 group-hover:text-pink-600 transition-colors">
+        {!available && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
+            <Badge tone="danger" size="md">
+              Out of stock
+            </Badge>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-1 flex-col gap-2 p-3 md:p-4">
+        <h3 className="text-sm font-semibold leading-snug text-gray-900 md:text-[0.9375rem]">
+          <Link
+            to={href}
+            className={cn(
+              "line-clamp-2 transition-colors after:absolute after:inset-0 after:content-['']",
+              "hover:text-pink-600 focus:outline-none",
+              /*
+               * The focus ring is drawn on the stretched ::after box, not on
+               * the article — a focus-within ring on the card would also fire
+               * when the add-to-cart button is focused, doubling up with that
+               * button's own ring.
+               */
+              "focus-visible:after:rounded-card focus-visible:after:outline focus-visible:after:outline-2",
+              "focus-visible:after:outline-offset-2 focus-visible:after:outline-pink-500",
+            )}
+          >
             {product.name}
-          </h3>
+          </Link>
+        </h3>
 
-          <div className="flex items-center mb-2">
-            <div className="flex items-center">{renderStars(product.rating || 0)}</div>
-            <span className="text-sm text-gray-500 ml-2">({product.numReviews || 0})</span>
-          </div>
+        {Number(product.numReviews) > 0 ? (
+          <Rating value={product.rating} count={product.numReviews} size="xs" />
+        ) : (
+          <span className="text-xs text-gray-400">No reviews yet</span>
+        )}
 
-          <div className="flex items-center justify-between">
-            <span className="text-xl font-bold text-pink-600">{formatPrice(product.price)}</span>
-            <button
-              onClick={handleAddToCart}
-              disabled={loading || !isAvailable()}
-              className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Adding..." : getButtonText()}
-            </button>
-          </div>
+        {/* mt-auto pins the price row to the bottom so uneven titles still line up. */}
+        <div className="mt-auto flex items-end justify-between gap-2 pt-1">
+          <Price price={product.price} originalPrice={product.originalPrice} size="md" showBadge={false} />
+
+          <button
+            type="button"
+            onClick={handleAction}
+            disabled={!available || pending}
+            aria-label={
+              !available
+                ? `${product.name} is out of stock`
+                : variantChoice
+                  ? `Choose options for ${product.name}`
+                  : `Add ${product.name} to cart`
+            }
+            className={cn(
+              "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
+              available
+                ? "bg-pink-600 text-white hover:bg-pink-700 active:scale-95"
+                : "cursor-not-allowed bg-gray-100 text-gray-400",
+              pending && "cursor-wait",
+            )}
+          >
+            {pending ? (
+              // label={null} — the button's own aria-label already names the action.
+              <Spinner size="xs" label={null} />
+            ) : variantChoice ? (
+              <SlidersHorizontal aria-hidden="true" className="h-4 w-4" />
+            ) : (
+              <ShoppingBag aria-hidden="true" className="h-4 w-4" />
+            )}
+          </button>
         </div>
       </div>
-    </Link>
+    </article>
   )
 }
 
