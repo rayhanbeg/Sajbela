@@ -2,6 +2,7 @@ import express from "express"
 import auth from "../middleware/auth.js"
 import {
   getAllOrders,
+  getOrderStats,
   createOrder,
   getUserOrders,
   getOrder,
@@ -15,6 +16,8 @@ const router = express.Router()
 router.get("/", auth, getAllOrders)
 router.post("/", auth, createOrder)
 router.get("/my", auth, getUserOrders)
+// Before "/:id", or Express matches "stats" as an order id and answers 500.
+router.get("/stats", auth, getOrderStats)
 router.get("/:id", auth, getOrder)
 router.put("/:id/status", auth, updateOrderStatus)
 router.put("/:id/cancel", auth, cancelOrder)

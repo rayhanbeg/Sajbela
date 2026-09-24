@@ -1,8 +1,28 @@
-import { useState, useEffect } from "react"
-import { Link, useNavigate, useLocation } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
-import { Eye, EyeOff } from "lucide-react"
-import { loginUser, clearError } from "../../lib/store/authSlice"
+import { Mail } from "lucide-react"
+
+import { clearError, googleLogin, loginUser } from "../../lib/store/authSlice"
+import { validateEmail } from "../../lib/utils"
+import AuthLayout, { AuthDivider, AuthError, AuthNotice } from "../../components/auth/AuthLayout"
+import GoogleSignIn from "../../components/auth/GoogleSignIn"
+import PasswordField from "../../components/auth/PasswordField"
+import { Button, FormField, Input } from "../../components/ui"
+
+/**
+ * Sign in.
+ *
+ * Changes from the old page beyond the visuals:
+ *  - The "Remember me" checkbox is gone. It had no state bound to it and no
+ *    effect on anything: the JWT is stored in localStorage with a 30-day
+ *    expiry whether it was ticked or not. A control that does nothing is worse
+ *    than no control.
+ *  - Validation is per-field with a focus jump, instead of relying on the
+ *    browser's `required` bubble plus one red bar at the top of the card.
+ *  - `?expired=1` (set by the axios 401 interceptor) explains *why* the shopper
+ *    is suddenly looking at a login form.
+ */
 
 const LoginPage = () => {
   const navigate = useNavigate()
@@ -10,155 +30,136 @@ const LoginPage = () => {
   const dispatch = useDispatch()
   const { loading, error, isAuthenticated } = useSelector((state) => state.auth)
 
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  })
-  const [showPassword, setShowPassword] = useState(false)
+  const [form, setForm] = useState({ email: "", password: "" })
+  const [errors, setErrors] = useState({})
 
-  // Get return path from URL parameters
-  const searchParams = new URLSearchParams(location.search)
-  const returnTo = searchParams.get("returnTo")
+  const params = new URLSearchParams(location.search)
+  const returnTo = params.get("returnTo")
+  const expired = params.get("expired") === "1"
 
   useEffect(() => {
-    if (isAuthenticated) {
-      // Check if there's a pending product selection to handle
-      const pendingSelection = localStorage.getItem("pendingProductSelection")
+    if (!isAuthenticated) return
 
-      if (pendingSelection && returnTo) {
-        try {
-          const selections = JSON.parse(pendingSelection)
-
-          // Redirect back to product page - the product page will handle the pending action
-          const redirectPath = decodeURIComponent(returnTo)
-          navigate(redirectPath)
-          return
-        } catch (error) {
-          console.error("Error parsing pending selection:", error)
-          localStorage.removeItem("pendingProductSelection")
-        }
-      }
-
-      // Normal redirect flow
-      const redirectPath = returnTo ? decodeURIComponent(returnTo) : "/account"
-      navigate(redirectPath)
-    }
+    // A pending "buy now" selection is replayed by the product page itself —
+    // all this page has to do is land back on it.
+    const target = returnTo ? decodeURIComponent(returnTo) : "/account"
+    navigate(target, { replace: true })
   }, [isAuthenticated, navigate, returnTo])
 
-  useEffect(() => {
-    return () => {
-      dispatch(clearError())
+  // Drop a stale "Invalid credentials" when leaving the page.
+  useEffect(() => () => dispatch(clearError()), [dispatch])
+
+  const update = (field) => (event) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }))
+    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))
+  }
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+
+    const found = {}
+    if (!form.email.trim()) found.email = "Enter your email address"
+    else if (!validateEmail(form.email.trim())) found.email = "That doesn't look like an email address"
+    if (!form.password) found.password = "Enter your password"
+
+    setErrors(found)
+
+    if (Object.keys(found).length > 0) {
+      document.getElementById(`login-${Object.keys(found)[0]}`)?.focus()
+      return
     }
-  }, [dispatch])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    dispatch(loginUser(formData))
+    dispatch(loginUser({ email: form.email.trim(), password: form.password }))
   }
 
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-  }
+  const registerHref = `/auth/register${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex items-center justify-center min-h-[80vh]">
-          <div className="max-w-md w-full">
-            <div className="bg-white rounded-lg shadow-md p-8">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
-                <p className="text-gray-600 mt-2">Sign in to your account</p>
-                {returnTo && (
-                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800">🛍️ Please sign in to continue with your purchase</p>
-                  </div>
-                )}
-              </div>
+    <AuthLayout
+      title="Welcome back"
+      description="Sign in to track orders, save addresses and keep your cart in sync."
+      notice={
+        expired ? (
+          <AuthNotice>Your session timed out. Sign in again to pick up where you left off.</AuthNotice>
+        ) : returnTo ? (
+          <AuthNotice>Sign in to continue with your purchase — your selection is saved.</AuthNotice>
+        ) : null
+      }
+      footer={
+        <>
+          New to Sajbela?{" "}
+          <Link
+            to={registerHref}
+            className="font-semibold text-pink-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+          >
+            Create an account
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <FormField label="Email address" htmlFor="login-email" error={errors.email} required>
+          {(field) => (
+            <Input
+              {...field}
+              type="email"
+              size="lg"
+              autoComplete="email"
+              inputMode="email"
+              leftIcon={<Mail />}
+              placeholder="you@example.com"
+              value={form.email}
+              onChange={update("email")}
+            />
+          )}
+        </FormField>
 
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-800">{error}</p>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    name="email"
-                    required
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                    placeholder="Enter your email"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      name="password"
-                      required
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="Enter your password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-600">Remember me</span>
-                  </div>
-                  <Link to="/auth/forgot-password" className="text-sm text-pink-600 hover:text-pink-700">
-                    Forgot password?
-                  </Link>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-pink-600 text-white py-2 px-4 rounded-lg hover:bg-pink-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? "Signing in..." : "Sign In"}
-                </button>
-              </form>
-
-              <div className="mt-6 text-center">
-                <p className="text-sm text-gray-600">
-                  Don't have an account?{" "}
-                  <Link
-                    to={`/auth/register${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`}
-                    className="text-pink-600 hover:text-pink-700 font-medium"
-                  >
-                    Create one
-                  </Link>
-                </p>
-              </div>
-            </div>
+        <div>
+          <div className="mb-1.5 flex items-baseline justify-between gap-3">
+            <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">
+              Password
+              <span className="ml-0.5 text-red-500" aria-hidden="true">
+                *
+              </span>
+            </label>
+            <Link
+              to="/auth/forgot-password"
+              className="text-sm font-medium text-pink-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+            >
+              Forgot password?
+            </Link>
           </div>
+
+          {/* The label sits above so it can share a row with the reset link,
+              so FormField is used here for its error slot only. */}
+          <FormField htmlFor="login-password" error={errors.password}>
+            {(field) => (
+              <PasswordField
+                {...field}
+                autoComplete="current-password"
+                placeholder="Your password"
+                value={form.password}
+                onChange={update("password")}
+              />
+            )}
+          </FormField>
         </div>
-      </div>
-    </div>
+
+        <AuthError>{error}</AuthError>
+
+        <Button type="submit" size="lg" fullWidth loading={loading} loadingText="Signing in…">
+          Sign in
+        </Button>
+      </form>
+
+      {/* Renders nothing until VITE_GOOGLE_CLIENT_ID is configured. */}
+      {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+        <div className="mt-6 space-y-4">
+          <AuthDivider />
+          <GoogleSignIn text="signin_with" onCredential={(credential) => dispatch(googleLogin(credential))} />
+        </div>
+      )}
+    </AuthLayout>
   )
 }
 

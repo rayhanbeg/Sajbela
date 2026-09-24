@@ -1,6 +1,12 @@
 import jwt from "jsonwebtoken"
 import User from "../models/User.js"
-import { sendVerificationCode, sendPasswordResetSuccess } from "../config/email.js"
+import { sendPasswordResetLink, sendPasswordResetSuccess } from "../config/email.js"
+
+/** 30-day session, matching the login/register handlers below. */
+const signToken = (userId) => jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "30d" })
+
+/** "nu***@gmail.com" — shown back on the reset page to confirm the inbox. */
+const maskEmail = (email = "") => email.replace(/(.{2})(.*)(@.*)/, "$1***$3")
 
 // Register user
 export const register = async (req, res) => {
@@ -84,68 +90,112 @@ export const login = async (req, res) => {
   }
 }
 
-// Forgot password - Send verification code
+// Forgot password — email a single-use reset link
+//
+// Always answers 200 with the same message, whether or not the address is
+// registered. The previous version returned 404 "User not found with this
+// email address", which turned this public endpoint into an account-existence
+// oracle: anyone could check whether a given email had an account here.
 export const forgotPassword = async (req, res) => {
-  try {
-    const { email } = req.body
+  const generic = {
+    message: "If an account exists for that email, we've sent a password reset link.",
+  }
 
-    // Find user by email
-    const user = await User.findOne({ email })
-    if (!user) {
-      return res.status(404).json({ message: "User not found with this email address" })
+  try {
+    const email = String(req.body.email || "")
+      .trim()
+      .toLowerCase()
+
+    if (!email) {
+      return res.status(400).json({ message: "Email address is required" })
     }
 
-    // Generate verification code
-    const verificationCode = user.generateVerificationCode()
+    const user = await User.findOne({ email })
+
+    // No account: answer exactly as if there were one, and send nothing.
+    if (!user) {
+      console.log(`🔑 Reset requested for unknown address: ${maskEmail(email)}`)
+      return res.json(generic)
+    }
+
+    const rawToken = user.createPasswordResetToken()
     await user.save()
 
-    // Send verification code via email
-    const emailResult = await sendVerificationCode(email, verificationCode, user.name)
+    const baseUrl = (process.env.FRONTEND_URL || "").replace(/\/$/, "")
+    const resetUrl = `${baseUrl}/auth/reset-password?token=${rawToken}`
+
+    const emailResult = await sendPasswordResetLink(user.email, user.name, resetUrl)
 
     if (!emailResult.success) {
-      return res.status(500).json({ message: "Failed to send verification code. Please try again." })
+      // The token is already saved, so drop it again — leaving a live token
+      // behind for an email that never arrived is a window with no upside.
+      user.clearPasswordResetToken()
+      await user.save()
+      return res.status(500).json({ message: "We couldn't send the email. Please try again in a moment." })
     }
 
-    res.json({
-      message: "Verification code sent to your email address",
-      email: email.replace(/(.{2})(.*)(@.*)/, "$1***$3"), // Mask email for security
-    })
+    res.json(generic)
   } catch (error) {
     console.error("Forgot password error:", error)
     res.status(500).json({ message: "Server error. Please try again." })
   }
 }
 
-// Verify code and reset password
+// Verify a reset token before showing the reset form
+//
+// Lets the reset page say "this link expired, here's a new one" up front,
+// instead of after the shopper has chosen and confirmed a new password.
+export const verifyResetToken = async (req, res) => {
+  try {
+    const user = await User.findByPasswordResetToken(req.params.token)
+
+    if (!user) {
+      return res.status(400).json({
+        message: "This reset link has expired or has already been used. Reset links last 30 minutes and work once.",
+      })
+    }
+
+    res.json({ valid: true, email: maskEmail(user.email) })
+  } catch (error) {
+    console.error("Verify reset token error:", error)
+    res.status(500).json({ message: "Server error. Please try again." })
+  }
+}
+
+// Reset password using the emailed token
 export const resetPassword = async (req, res) => {
   try {
-    const { email, verificationCode, newPassword } = req.body
+    const { token, password } = req.body
 
-    // Find user by email
-    const user = await User.findOne({ email })
+    if (!token || !password) {
+      return res.status(400).json({ message: "A reset link and a new password are both required" })
+    }
+
+    if (String(password).length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" })
+    }
+
+    const user = await User.findByPasswordResetToken(token)
+
     if (!user) {
-      return res.status(404).json({ message: "User not found" })
+      return res.status(400).json({
+        message: "This reset link has expired or has already been used. Please request a new one.",
+      })
     }
 
-    // Check if verification code is valid and not expired
-    if (!user.verificationCode || user.verificationCode !== verificationCode) {
-      return res.status(400).json({ message: "Invalid verification code" })
-    }
-
-    if (user.verificationCodeExpires < Date.now()) {
-      return res.status(400).json({ message: "Verification code has expired. Please request a new one." })
-    }
-
-    // Update password
-    user.password = newPassword
-    user.verificationCode = undefined
-    user.verificationCodeExpires = undefined
+    user.password = password
+    // Single use: consumed in the same save that sets the new password, so the
+    // link can't be replayed from the shopper's email history.
+    user.clearPasswordResetToken()
     await user.save()
 
-    // Send success email
-    await sendPasswordResetSuccess(email, user.name)
+    // Best effort — the password is already changed, so a mail failure here
+    // must not read as a failed reset.
+    sendPasswordResetSuccess(user.email, user.name).catch((error) =>
+      console.error("Reset confirmation email failed:", error),
+    )
 
-    res.json({ message: "Password reset successful. You can now login with your new password." })
+    res.json({ message: "Password reset successful. You can now log in with your new password." })
   } catch (error) {
     console.error("Reset password error:", error)
     res.status(500).json({ message: "Server error. Please try again." })
@@ -173,21 +223,32 @@ export const updateProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" })
     }
 
-    user.name = name || user.name
-    user.email = email || user.email
-    user.phone = phone || user.phone
+    const nextEmail = email?.trim().toLowerCase()
+
+    // `email` is a unique index, so without this check the save below throws a
+    // duplicate-key error and the shopper is told "Server error updating
+    // profile" — which reads like our fault, not a taken address.
+    if (nextEmail && nextEmail !== user.email) {
+      const taken = await User.findOne({ email: nextEmail, _id: { $ne: user._id } })
+      if (taken) {
+        return res.status(400).json({ message: "That email is already used by another account" })
+      }
+      user.email = nextEmail
+    }
+
+    user.name = name?.trim() || user.name
+    user.phone = phone?.trim() || user.phone
 
     await user.save()
 
+    // The whole document (minus the password) rather than a hand-picked
+    // subset: the client merges this into its session, and omitting `_id` /
+    // `createdAt` / `avatar` here silently stripped them from it.
+    const { password: _password, resetPasswordToken, resetPasswordExpires, ...safe } = user.toObject()
+
     res.json({
       message: "Profile updated successfully",
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-      },
+      user: safe,
     })
   } catch (error) {
     console.error("Update profile error:", error)

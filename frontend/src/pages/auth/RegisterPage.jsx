@@ -1,8 +1,52 @@
-import { useState, useEffect } from "react"
-import { Link, useNavigate, useLocation } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
-import { Eye, EyeOff } from "lucide-react"
-import { registerUser, clearError } from "../../lib/store/authSlice"
+import { Mail, Phone, User } from "lucide-react"
+
+import { clearError, googleLogin, registerUser } from "../../lib/store/authSlice"
+import { validateEmail, validatePhone } from "../../lib/utils"
+import AuthLayout, { AuthDivider, AuthError, AuthNotice } from "../../components/auth/AuthLayout"
+import GoogleSignIn from "../../components/auth/GoogleSignIn"
+import PasswordField, { PasswordStrength } from "../../components/auth/PasswordField"
+import { Button, Checkbox, FormField, Input } from "../../components/ui"
+
+/**
+ * Create an account.
+ *
+ * The old form funnelled every problem — bad phone, mismatched passwords,
+ * short password, server error — through a single `validationError` string in
+ * one box, so you could only ever be told about one thing at a time and never
+ * which field it belonged to. Errors are per-field now, and the phone field
+ * keeps its live check (it's the one people get wrong).
+ *
+ * Phone is marked required because the User model requires it — the old form
+ * labelled it optional and then let the request fail on the way in.
+ */
+
+const EMPTY = { name: "", email: "", phone: "", password: "", confirmPassword: "" }
+
+function validate(form, agreed) {
+  const errors = {}
+
+  if (!form.name.trim()) errors.name = "Enter your name"
+  else if (form.name.trim().length < 2) errors.name = "That name looks too short"
+
+  if (!form.email.trim()) errors.email = "Enter your email address"
+  else if (!validateEmail(form.email.trim())) errors.email = "That doesn't look like an email address"
+
+  if (!form.phone.trim()) errors.phone = "Enter your phone number"
+  else if (!validatePhone(form.phone)) errors.phone = "Enter an 11-digit number starting with 01"
+
+  if (!form.password) errors.password = "Choose a password"
+  else if (form.password.length < 6) errors.password = "Use at least 6 characters"
+
+  if (!form.confirmPassword) errors.confirmPassword = "Re-enter your password"
+  else if (form.password !== form.confirmPassword) errors.confirmPassword = "Passwords don't match"
+
+  if (!agreed) errors.terms = "Please accept the terms to continue"
+
+  return errors
+}
 
 const RegisterPage = () => {
   const navigate = useNavigate()
@@ -10,279 +54,201 @@ const RegisterPage = () => {
   const dispatch = useDispatch()
   const { loading, error, isAuthenticated } = useSelector((state) => state.auth)
 
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
-  })
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [validationError, setValidationError] = useState("")
-  const [phoneError, setPhoneError] = useState("")
+  const [form, setForm] = useState(EMPTY)
+  const [errors, setErrors] = useState({})
+  const [agreed, setAgreed] = useState(false)
 
-  // Get return path from URL parameters
-  const searchParams = new URLSearchParams(location.search)
-  const returnTo = searchParams.get("returnTo")
+  const returnTo = new URLSearchParams(location.search).get("returnTo")
 
   useEffect(() => {
-    if (isAuthenticated) {
-      // Check if there's a pending product selection to handle
-      const pendingSelection = localStorage.getItem("pendingProductSelection")
-
-      if (pendingSelection && returnTo) {
-        try {
-          const selections = JSON.parse(pendingSelection)
-
-          // Redirect back to product page - the product page will handle the pending action
-          const redirectPath = decodeURIComponent(returnTo)
-          navigate(redirectPath)
-          return
-        } catch (error) {
-          console.error("Error parsing pending selection:", error)
-          localStorage.removeItem("pendingProductSelection")
-        }
-      }
-
-      // Normal redirect flow
-      const redirectPath = returnTo ? decodeURIComponent(returnTo) : "/account"
-      navigate(redirectPath)
-    }
+    if (!isAuthenticated) return
+    navigate(returnTo ? decodeURIComponent(returnTo) : "/account", { replace: true })
   }, [isAuthenticated, navigate, returnTo])
 
-  useEffect(() => {
-    return () => {
-      dispatch(clearError())
-    }
-  }, [dispatch])
+  useEffect(() => () => dispatch(clearError()), [dispatch])
 
-  // Validate Bangladeshi phone number (must start with 01 and be 11 digits)
-  const validateBangladeshiPhone = (phone) => {
-    // Remove any spaces or dashes
-    const cleanPhone = phone.replace(/[\s-]/g, "")
-
-    // Must start with 01 and be exactly 11 digits
-    const phoneRegex = /^01[3-9]\d{8}$/
-    return phoneRegex.test(cleanPhone)
+  const update = (field) => (event) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }))
+    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))
   }
 
-  // Handle phone input - only allow numbers, no auto-formatting
-  const handlePhoneChange = (e) => {
-    let value = e.target.value
+  /** Digits only, capped at 11 — matches the 01XXXXXXXXX format exactly. */
+  const updatePhone = (event) => {
+    const digits = event.target.value.replace(/\D/g, "").slice(0, 11)
+    setForm((prev) => ({ ...prev, phone: digits }))
 
-    // Remove all non-numeric characters
-    value = value.replace(/\D/g, "")
-
-    // Limit to 11 digits
-    if (value.length > 11) {
-      value = value.slice(0, 11)
-    }
-
-    setFormData({
-      ...formData,
-      phone: value,
-    })
-
-    // Real-time validation - show error if invalid
-    if (value.length > 0) {
-      if (!validateBangladeshiPhone(value)) {
-        setPhoneError("Number is not valid")
-      } else {
-        setPhoneError("")
-      }
-    } else {
-      setPhoneError("")
-    }
+    // Live feedback once the number is long enough to judge, so they don't
+    // discover it's wrong only after filling in the whole form.
+    setErrors((prev) => ({
+      ...prev,
+      phone: digits.length === 11 && !validatePhone(digits) ? "Enter a valid Bangladeshi number" : undefined,
+    }))
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setValidationError("")
+  const handleSubmit = (event) => {
+    event.preventDefault()
 
-    // Validate phone number
-    if (formData.phone && !validateBangladeshiPhone(formData.phone)) {
-      setValidationError("Please enter a valid Bangladeshi phone number starting with 01")
+    const found = validate(form, agreed)
+    setErrors(found)
+
+    const first = Object.keys(found)[0]
+    if (first) {
+      document.getElementById(first === "terms" ? "register-terms" : `register-${first}`)?.focus()
       return
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      setValidationError("Passwords do not match")
-      return
-    }
-
-    if (formData.password.length < 6) {
-      setValidationError("Password must be at least 6 characters")
-      return
-    }
-
-    const { confirmPassword, ...userData } = formData
-    dispatch(registerUser(userData))
+    dispatch(
+      registerUser({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone,
+        password: form.password,
+      }),
+    )
   }
 
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-  }
+  const loginHref = `/auth/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex items-center justify-center min-h-[80vh]">
-          <div className="max-w-md w-full">
-            <div className="bg-white rounded-lg shadow-md p-8">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold text-gray-900">Create Account</h2>
-                <p className="text-gray-600 mt-2">Join us today and start shopping</p>
-                {returnTo && (
-                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800">🛍️ Create an account to continue with your purchase</p>
-                  </div>
-                )}
-              </div>
+    <AuthLayout
+      title="Create your account"
+      description="One account for orders, saved addresses and faster checkout."
+      notice={returnTo ? <AuthNotice>Create an account to finish your purchase.</AuthNotice> : null}
+      footer={
+        <>
+          Already have an account?{" "}
+          <Link
+            to={loginHref}
+            className="font-semibold text-pink-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+          >
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <FormField label="Full name" htmlFor="register-name" error={errors.name} required>
+          {(field) => (
+            <Input
+              {...field}
+              size="lg"
+              autoComplete="name"
+              leftIcon={<User />}
+              placeholder="e.g. Nusrat Jahan"
+              value={form.name}
+              onChange={update("name")}
+            />
+          )}
+        </FormField>
 
-              {(error || validationError) && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-800">{error || validationError}</p>
-                </div>
-              )}
+        <FormField label="Email address" htmlFor="register-email" error={errors.email} required>
+          {(field) => (
+            <Input
+              {...field}
+              type="email"
+              size="lg"
+              autoComplete="email"
+              inputMode="email"
+              leftIcon={<Mail />}
+              placeholder="you@example.com"
+              value={form.email}
+              onChange={update("email")}
+            />
+          )}
+        </FormField>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    name="name"
-                    required
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                    placeholder="Enter your full name"
-                  />
-                </div>
+        <FormField
+          label="Phone number"
+          htmlFor="register-phone"
+          error={errors.phone}
+          hint="We only use this for delivery updates."
+          required
+        >
+          {(field) => (
+            <Input
+              {...field}
+              type="tel"
+              size="lg"
+              autoComplete="tel"
+              inputMode="numeric"
+              maxLength={11}
+              leftIcon={<Phone />}
+              placeholder="01XXXXXXXXX"
+              value={form.phone}
+              onChange={updatePhone}
+            />
+          )}
+        </FormField>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
-                  <input
-                    type="email"
-                    name="email"
-                    required
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                    placeholder="Enter your email"
-                  />
-                </div>
+        <FormField label="Password" htmlFor="register-password" error={errors.password} required>
+          {(field) => (
+            <>
+              <PasswordField
+                {...field}
+                autoComplete="new-password"
+                placeholder="At least 6 characters"
+                value={form.password}
+                onChange={update("password")}
+              />
+              <PasswordStrength value={form.password} />
+            </>
+          )}
+        </FormField>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone Number
-                    <span className="text-xs text-gray-500 ml-1">(Must start with 01)</span>
-                  </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handlePhoneChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                      phoneError ? "border-red-300 focus:ring-red-500" : "border-gray-300 focus:ring-pink-500"
-                    }`}
-                    placeholder="01XXXXXXXXX"
-                    maxLength="11"
-                    inputMode="numeric"
-                  />
-                  {phoneError && <p className="text-sm text-red-600 mt-1">{phoneError}</p>}
-                </div>
+        <FormField label="Confirm password" htmlFor="register-confirmPassword" error={errors.confirmPassword} required>
+          {(field) => (
+            <PasswordField
+              {...field}
+              autoComplete="new-password"
+              placeholder="Re-enter your password"
+              value={form.confirmPassword}
+              onChange={update("confirmPassword")}
+            />
+          )}
+        </FormField>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      name="password"
-                      required
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="Create a password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      name="confirmPassword"
-                      required
-                      value={formData.confirmPassword}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="Confirm your password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                    >
-                      {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    required
-                    className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-600">
-                    I agree to the{" "}
-                    <Link to="/terms" className="text-pink-600 hover:text-pink-700">
-                      Terms of Service
-                    </Link>{" "}
-                    and{" "}
-                    <Link to="/privacy" className="text-pink-600 hover:text-pink-700">
-                      Privacy Policy
-                    </Link>
-                  </span>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-pink-600 text-white py-2 px-4 rounded-lg hover:bg-pink-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? "Creating Account..." : "Create Account"}
-                </button>
-              </form>
-
-              <div className="mt-6 text-center">
-                <p className="text-sm text-gray-600">
-                  Already have an account?{" "}
-                  <Link
-                    to={`/auth/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`}
-                    className="text-pink-600 hover:text-pink-700 font-medium"
-                  >
-                    Sign in
-                  </Link>
-                </p>
-              </div>
-            </div>
-          </div>
+        <div>
+          <Checkbox
+            id="register-terms"
+            checked={agreed}
+            onChange={(event) => {
+              setAgreed(event.target.checked)
+              setErrors((prev) => ({ ...prev, terms: undefined }))
+            }}
+            label={
+              <>
+                I agree to the{" "}
+                <Link to="/terms" className="font-medium text-pink-600 underline-offset-2 hover:underline">
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link to="/privacy" className="font-medium text-pink-600 underline-offset-2 hover:underline">
+                  Privacy Policy
+                </Link>
+              </>
+            }
+          />
+          {errors.terms && (
+            <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">
+              {errors.terms}
+            </p>
+          )}
         </div>
-      </div>
-    </div>
+
+        <AuthError>{error}</AuthError>
+
+        <Button type="submit" size="lg" fullWidth loading={loading} loadingText="Creating account…">
+          Create account
+        </Button>
+      </form>
+
+      {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+        <div className="mt-6 space-y-4">
+          <AuthDivider />
+          <GoogleSignIn text="signup_with" onCredential={(credential) => dispatch(googleLogin(credential))} />
+        </div>
+      )}
+    </AuthLayout>
   )
 }
 

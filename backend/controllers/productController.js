@@ -9,7 +9,13 @@ export const getProducts = async (req, res) => {
     const { category, search, page = 1, limit = 12, sort = "createdAt", color, price, minPrice, maxPrice } = req.query
 
     // Build the query object
-    const query = {}
+    //
+    // Retired products are hidden from the shop. `$ne: false` rather than
+    // `true` so the documents written before the field existed still show.
+    // createOrder already refuses to sell an inactive product ("… is no
+    // longer available"), so without this the shop listed items that threw an
+    // error at checkout. Admin listing is a separate handler below.
+    const query = { isActive: { $ne: false } }
 
     console.log("Building query...")
 
@@ -161,6 +167,88 @@ export const getProducts = async (req, res) => {
   }
 }
 
+/*
+ * Admin catalogue listing.
+ *
+ * The admin product page used to dispatch the shopper's `fetchProducts` with
+ * `limit: 1000`, then search, filter, sort and paginate the whole catalogue in
+ * the browser. Two problems with that: it wrote 1000 products into the same
+ * Redux slice the storefront reads, so opening the admin list and going back
+ * to the shop showed an unpaginated wall of products; and it never saw retired
+ * ones, because the shop query filters them out — leaving no way to un-retire
+ * a product from the UI.
+ *
+ * This is the same filtering, done in Mongo, including inactive products.
+ */
+export const getAdminProducts = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Access denied. Admin only." })
+    }
+
+    const { page = 1, limit = 20, search, category, sort = "newest", status } = req.query
+
+    const query = {}
+
+    if (category && category !== "all") {
+      query.category = String(category).toLowerCase()
+    }
+
+    if (status === "active") query.isActive = { $ne: false }
+    if (status === "retired") query.isActive = false
+
+    if (search && search.trim()) {
+      const term = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      query.$or = [
+        { name: { $regex: term, $options: "i" } },
+        { description: { $regex: term, $options: "i" } },
+        { tags: { $in: [new RegExp(term, "i")] } },
+      ]
+    }
+
+    const SORTS = {
+      newest: { createdAt: -1 },
+      oldest: { createdAt: 1 },
+      "name-asc": { name: 1 },
+      "name-desc": { name: -1 },
+      "price-low": { price: 1 },
+      "price-high": { price: -1 },
+      "stock-low": { stock: 1 },
+    }
+
+    const pageNum = Math.max(Number.parseInt(page) || 1, 1)
+    const limitNum = Math.max(Number.parseInt(limit) || 20, 1)
+
+    const [products, total, categoryCounts] = await Promise.all([
+      Product.find(query)
+        .sort(SORTS[sort] || SORTS.newest)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      Product.countDocuments(query),
+      // Counts for the category tabs, unaffected by the current category
+      // filter — otherwise selecting "Earrings" showed "Earrings (12)" and
+      // zero for everything else.
+      Product.aggregate([{ $group: { _id: "$category", count: { $sum: 1 } } }]),
+    ])
+
+    res.json({
+      products,
+      categoryCounts: categoryCounts.reduce((acc, row) => ({ ...acc, [row._id]: row.count }), {}),
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(total / limitNum),
+        total,
+        hasNext: pageNum * limitNum < total,
+        hasPrev: pageNum > 1,
+      },
+    })
+  } catch (error) {
+    console.error("Get admin products error:", error)
+    res.status(500).json({ message: "Server error fetching products" })
+  }
+}
+
 // Get single product
 export const getProduct = async (req, res) => {
   try {
@@ -180,7 +268,7 @@ export const getProduct = async (req, res) => {
 // Get featured products
 export const getFeaturedProducts = async (req, res) => {
   try {
-    const products = await Product.find({ featured: true }).sort({ rating: -1 }).limit(8)
+    const products = await Product.find({ featured: true, isActive: { $ne: false } }).sort({ rating: -1 }).limit(8)
     res.json(products)
   } catch (error) {
     console.error("Get featured products error:", error)
@@ -191,7 +279,9 @@ export const getFeaturedProducts = async (req, res) => {
 // Get new arrivals
 export const getNewArrivals = async (req, res) => {
   try {
-    const products = await Product.find({ isNewArrival: true }).sort({ createdAt: -1 }).limit(8)
+    const products = await Product.find({ isNewArrival: true, isActive: { $ne: false } })
+      .sort({ createdAt: -1 })
+      .limit(8)
     res.json(products)
   } catch (error) {
     console.error("Get new arrivals error:", error)
@@ -202,7 +292,7 @@ export const getNewArrivals = async (req, res) => {
 // Get combo products
 export const getCombos = async (req, res) => {
   try {
-    const products = await Product.find({ isCombo: true }).sort({ createdAt: -1 }).limit(6)
+    const products = await Product.find({ isCombo: true, isActive: { $ne: false } }).sort({ createdAt: -1 }).limit(6)
     res.json(products)
   } catch (error) {
     console.error("Get combos error:", error)

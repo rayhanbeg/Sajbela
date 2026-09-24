@@ -10,30 +10,125 @@ export const getAllOrders = async (req, res) => {
       return res.status(403).json({ message: "Access denied. Admin only." })
     }
 
-    const { page = 1, limit = 10, status } = req.query
-    const query = status ? { status } : {}
+    const { page = 1, limit = 10, status, search, startDate, endDate } = req.query
+
+    const query = {}
+    if (status) query.status = status
+
+    /*
+     * The admin table has had "From" and "End" date inputs since the first
+     * commit and this handler ignored them, so the filters were decorative —
+     * picking a range re-fetched the same unfiltered page.
+     *
+     * `endDate` is pushed to the end of its day: a range of 1–7 June that
+     * stopped at 00:00 on the 7th silently dropped every order placed on the
+     * last day the admin asked for.
+     */
+    if (startDate || endDate) {
+      query.createdAt = {}
+      if (startDate) query.createdAt.$gte = new Date(startDate)
+      if (endDate) {
+        const end = new Date(endDate)
+        end.setHours(23, 59, 59, 999)
+        query.createdAt.$lte = end
+      }
+    }
+
+    /*
+     * Search matches the recipient name or phone on the shipping address, not
+     * the account — most orders here are COD and the shopper phones about
+     * them, so the number they're calling from is the practical lookup key.
+     */
+    if (search && search.trim()) {
+      const term = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      query.$or = [
+        { "shippingAddress.fullName": { $regex: term, $options: "i" } },
+        { "shippingAddress.phone": { $regex: term, $options: "i" } },
+      ]
+    }
+
+    const pageNum = Math.max(Number.parseInt(page) || 1, 1)
+    const limitNum = Math.max(Number.parseInt(limit) || 10, 1)
 
     const orders = await Order.find(query)
       .populate("user", "name email")
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(limitNum)
+      .skip((pageNum - 1) * limitNum)
 
     const total = await Order.countDocuments(query)
 
     res.json({
       orders,
       pagination: {
-        currentPage: Number.parseInt(page),
-        totalPages: Math.ceil(total / limit),
+        currentPage: pageNum,
+        totalPages: Math.ceil(total / limitNum),
         total,
-        hasNext: page * limit < total,
-        hasPrev: page > 1,
+        hasNext: pageNum * limitNum < total,
+        hasPrev: pageNum > 1,
       },
     })
   } catch (error) {
     console.error("Get all orders error:", error)
     res.status(500).json({ message: "Server error fetching orders" })
+  }
+}
+
+/*
+ * Dashboard figures (admin only).
+ *
+ * The old dashboard fetched the 100 most recent orders and added up their
+ * totals in the browser, labelling the result "Total Revenue" — so revenue
+ * stopped growing at order 101 and quietly counted cancelled orders as
+ * income. Three aggregations here instead, over the whole collection.
+ */
+export const getOrderStats = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Access denied. Admin only." })
+    }
+
+    const days = Math.min(Math.max(Number.parseInt(req.query.days) || 14, 1), 90)
+
+    const since = new Date()
+    since.setHours(0, 0, 0, 0)
+    since.setDate(since.getDate() - (days - 1))
+
+    const [totals, byStatus, series] = await Promise.all([
+      Order.aggregate([
+        {
+          $group: {
+            _id: null,
+            orders: { $sum: 1 },
+            revenue: { $sum: { $cond: [{ $eq: ["$status", "cancelled"] }, 0, "$totalPrice"] } },
+          },
+        },
+      ]),
+      Order.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+      Order.aggregate([
+        // Cancelled orders are excluded from revenue but still counted as orders.
+        { $match: { status: { $ne: "cancelled" }, createdAt: { $gte: since } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            revenue: { $sum: "$totalPrice" },
+            orders: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+    ])
+
+    res.json({
+      totalOrders: totals[0]?.orders || 0,
+      totalRevenue: totals[0]?.revenue || 0,
+      statusCounts: byStatus.reduce((acc, row) => ({ ...acc, [row._id]: row.count }), {}),
+      series: series.map((row) => ({ date: row._id, revenue: row.revenue, orders: row.orders })),
+      days,
+    })
+  } catch (error) {
+    console.error("Get order stats error:", error)
+    res.status(500).json({ message: "Server error fetching order stats" })
   }
 }
 

@@ -1,384 +1,361 @@
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useSelector } from "react-redux"
-import { useNavigate } from "react-router-dom"
-import { Search, Shield, ShieldOff, UserCheck, UserX, UsersIcon, Filter } from "lucide-react"
+import { Mail, Search, Shield, ShieldCheck, Trash2, UserCog, Users } from "lucide-react"
+import { AdminPageHeader, DataTable, Panel } from "../../components/admin"
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  FormField,
+  IconButton,
+  Input,
+  Pagination,
+  Select,
+  useConfirm,
+  useToast,
+} from "../../components/ui"
 import { usersAPI } from "../../lib/api"
+import { formatDate } from "../../lib/utils"
+
+/**
+ * Admin customers.
+ *
+ * The Active/Inactive column and its toggle are gone. They were never real:
+ * `User` has no `isActive` field and `routes/users.js` has no
+ * `PUT /:id/status`, so the badge read "Inactive" for every account that had
+ * ever existed and the button behind it could only 404. The summary panel then
+ * counted those imaginary flags and reported every customer as inactive.
+ *
+ * What replaces it is the endpoint that was already there and unused —
+ * `DELETE /users/:userId`, behind a confirm dialog. The server refuses to
+ * delete the calling admin, and the row hides the action for your own account
+ * so you don't discover that by clicking.
+ */
+
+const PAGE_SIZE = 10
+
+const initials = (name) => (name || "?").trim().charAt(0).toUpperCase()
 
 const AdminUsers = () => {
-  const navigate = useNavigate()
-  const { user, isAuthenticated } = useSelector((state) => state.auth)
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { user: currentUser } = useSelector((state) => state.auth)
 
   const [users, setUsers] = useState([])
+  const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 1, total: 0 })
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [roleFilter, setRoleFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pagination, setPagination] = useState({})
+  const [error, setError] = useState(null)
+  const [page, setPage] = useState(1)
+  const [role, setRole] = useState("")
+  const [search, setSearch] = useState("")
+  const [searchDraft, setSearchDraft] = useState("")
+  // Ids with a role change or delete in flight, so their row buttons disable.
+  const [busyIds, setBusyIds] = useState([])
 
   useEffect(() => {
-    if (!isAuthenticated || user?.role !== "admin") {
-      navigate("/auth/login")
-      return
-    }
+    const timer = setTimeout(() => {
+      setSearch(searchDraft)
+      setPage(1)
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [searchDraft])
 
-    fetchUsers()
-  }, [isAuthenticated, user, navigate, currentPage, searchTerm, roleFilter, statusFilter])
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
 
-  const fetchUsers = async () => {
     try {
-      setLoading(true)
-      const response = await usersAPI.getAll({
-        page: currentPage,
-        search: searchTerm,
-        role: roleFilter !== "all" ? roleFilter : undefined,
-        isActive: statusFilter !== "all" ? statusFilter === "active" : undefined,
-        limit: 10,
+      const { data } = await usersAPI.getAll({
+        page,
+        limit: PAGE_SIZE,
+        ...(search ? { search } : {}),
+        ...(role ? { role } : {}),
       })
-      setUsers(response.data.users)
-      setPagination(response.data.pagination)
-    } catch (error) {
-      console.error("Error fetching users:", error)
+      setUsers(data.users || [])
+      setPagination(data.pagination || { currentPage: 1, totalPages: 1, total: 0 })
+    } catch (err) {
+      setError(err.response?.data?.message || "Could not load customers.")
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, search, role])
 
-  const handleRoleChange = async (userId, newRole) => {
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const withBusy = async (id, work) => {
+    setBusyIds((prev) => [...prev, id])
     try {
-      await usersAPI.updateRole(userId, newRole)
-      fetchUsers() // Refresh the list
-    } catch (error) {
-      console.error("Error updating user role:", error)
-      alert("Failed to update user role")
+      await work()
+    } finally {
+      setBusyIds((prev) => prev.filter((busy) => busy !== id))
     }
   }
 
-  const handleStatusChange = async (userId, isActive) => {
-    try {
-      await usersAPI.updateStatus(userId, isActive)
-      fetchUsers() // Refresh the list
-    } catch (error) {
-      console.error("Error updating user status:", error)
-      alert("Failed to update user status")
-    }
+  const handleRoleChange = (target) => {
+    const nextRole = target.role === "admin" ? "user" : "admin"
+
+    return withBusy(target._id, async () => {
+      const ok = await confirm({
+        title: nextRole === "admin" ? `Make ${target.name} an admin?` : `Remove admin access from ${target.name}?`,
+        message:
+          nextRole === "admin"
+            ? "Admins can add and delete products, see every order, and change other people's roles."
+            : "They'll keep their account and order history but lose access to this panel.",
+        confirmLabel: nextRole === "admin" ? "Make admin" : "Remove access",
+        tone: nextRole === "admin" ? "brand" : "danger",
+      })
+      if (!ok) return
+
+      try {
+        await usersAPI.updateRole(target._id, nextRole)
+        setUsers((prev) => prev.map((row) => (row._id === target._id ? { ...row, role: nextRole } : row)))
+        toast.success(nextRole === "admin" ? "Admin access granted" : "Admin access removed")
+      } catch (err) {
+        toast.error("Could not change the role", { description: err.response?.data?.message || "Please try again." })
+      }
+    })
   }
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    setCurrentPage(1)
-    fetchUsers()
-  }
+  const handleDelete = (target) =>
+    withBusy(target._id, async () => {
+      const ok = await confirm({
+        title: `Delete ${target.name}?`,
+        message: "Their account is removed permanently. Orders they've already placed stay in your records.",
+        confirmLabel: "Delete account",
+        tone: "danger",
+      })
+      if (!ok) return
 
-  const clearFilters = () => {
-    setSearchTerm("")
-    setRoleFilter("all")
-    setStatusFilter("all")
-    setCurrentPage(1)
-  }
+      try {
+        await usersAPI.delete(target._id)
+        toast.success("Customer deleted")
+        // Refetch rather than splice: the page is now one short, and on the
+        // last page removing the only row should step back a page.
+        if (users.length === 1 && page > 1) setPage(page - 1)
+        else load()
+      } catch (err) {
+        toast.error("Could not delete the account", {
+          description: err.response?.data?.message || "Please try again.",
+        })
+      }
+    })
+
+  const columns = [
+    {
+      key: "user",
+      header: "Customer",
+      card: "title",
+      cell: (row) => (
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pink-100 text-sm font-semibold text-pink-700"
+          >
+            {initials(row.name)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-medium text-gray-900">{row.name}</p>
+            <p className="truncate text-xs text-gray-500 lg:hidden">{row.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "email",
+      header: "Email",
+      cardLabel: "Email",
+      card: "hidden",
+      cell: (row) => (
+        <a href={`mailto:${row.email}`} className="break-all text-gray-700 hover:text-pink-600 hover:underline">
+          {row.email}
+        </a>
+      ),
+    },
+    {
+      key: "role",
+      header: "Role",
+      card: "meta",
+      cell: (row) =>
+        row.role === "admin" ? (
+          <Badge tone="admin" size="sm" icon={<ShieldCheck />}>
+            Admin
+          </Badge>
+        ) : (
+          <Badge tone="neutral" size="sm">
+            Customer
+          </Badge>
+        ),
+    },
+    {
+      key: "joined",
+      header: "Joined",
+      cardLabel: "Joined",
+      cellClass: "whitespace-nowrap text-gray-500",
+      cell: (row) => formatDate(row.createdAt),
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      card: "actions",
+      cell: (row) => {
+        const isSelf = row._id === currentUser?._id
+        const busy = busyIds.includes(row._id)
+
+        if (isSelf) {
+          return (
+            <span className="text-xs text-gray-500 max-lg:block max-lg:text-center">This is you</span>
+          )
+        }
+
+        return (
+          <div className="flex items-center justify-end gap-1 max-lg:justify-center">
+            <IconButton
+              label={row.role === "admin" ? `Remove admin access from ${row.name}` : `Make ${row.name} an admin`}
+              size="sm"
+              variant={row.role === "admin" ? "ghost-brand" : "ghost"}
+              disabled={busy}
+              onClick={() => handleRoleChange(row)}
+            >
+              {row.role === "admin" ? <UserCog /> : <Shield />}
+            </IconButton>
+            <IconButton
+              label={`Delete ${row.name}`}
+              size="sm"
+              variant="danger"
+              disabled={busy}
+              onClick={() => handleDelete(row)}
+            >
+              <Trash2 />
+            </IconButton>
+          </div>
+        )
+      },
+    },
+  ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-            <p className="text-gray-600">Manage user roles and permissions</p>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <AdminPageHeader
+        title="Customers"
+        description={
+          loading ? "Loading customers…" : `${pagination.total} account${pagination.total === 1 ? "" : "s"}.`
+        }
+      />
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-center mb-4">
-            <Filter className="h-5 w-5 text-gray-500 mr-2" />
-            <h2 className="text-lg font-semibold text-gray-900">Search & Filters</h2>
-          </div>
-
-          <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Search Users</label>
+      <Panel bodyClassName="p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <FormField label="Search" htmlFor="user-search" className="sm:col-span-2">
+            {(field) => (
               <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search users by name or email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
                 />
-                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                <Input
+                  {...field}
+                  type="search"
+                  value={searchDraft}
+                  onChange={(event) => setSearchDraft(event.target.value)}
+                  placeholder="Name or email"
+                  className="pl-9"
+                />
               </div>
-            </div>
+            )}
+          </FormField>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+          <FormField label="Role" htmlFor="user-role">
+            {(field) => (
+              <Select
+                {...field}
+                value={role}
+                onChange={(event) => {
+                  setRole(event.target.value)
+                  setPage(1)
+                }}
               >
-                <option value="all">All Roles</option>
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
-
-            <div className="flex items-end space-x-2">
-              <button
-                type="submit"
-                className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors"
-              >
-                Search
-              </button>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-          </form>
+                <option value="">Everyone</option>
+                <option value="user">Customers</option>
+                <option value="admin">Admins</option>
+              </Select>
+            )}
+          </FormField>
         </div>
+      </Panel>
 
-        {/* Users Summary */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Users Summary</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">{pagination.totalUsers || 0}</p>
-              <p className="text-sm text-gray-600">Total Users</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">{users.filter((u) => u.isActive).length}</p>
-              <p className="text-sm text-gray-600">Active Users</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-purple-600">{users.filter((u) => u.role === "admin").length}</p>
-              <p className="text-sm text-gray-600">Admin Users</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-red-600">{users.filter((u) => !u.isActive).length}</p>
-              <p className="text-sm text-gray-600">Inactive Users</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Users Table */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Joined
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan="6" className="px-6 py-4 text-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600 mx-auto"></div>
-                    </td>
-                  </tr>
-                ) : users.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="px-6 py-4 text-center">
-                      <div className="flex flex-col items-center py-8">
-                        <UsersIcon className="h-12 w-12 text-gray-400 mb-4" />
-                        <p className="text-gray-500 text-lg">No users found</p>
-                        <p className="text-gray-400 text-sm">Try adjusting your search or filters</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  users.map((userItem) => (
-                    <tr key={userItem._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 bg-pink-100 rounded-full flex items-center justify-center">
-                            <span className="text-pink-600 font-medium">{userItem.name.charAt(0).toUpperCase()}</span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{userItem.name}</div>
-                            <div className="text-sm text-gray-500">ID: {userItem._id.slice(-6)}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{userItem.email}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            userItem.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {userItem.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            userItem.isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {userItem.isActive ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(userItem.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          {/* Role Toggle */}
-                          {userItem._id !== user._id && (
-                            <button
-                              onClick={() =>
-                                handleRoleChange(userItem._id, userItem.role === "admin" ? "user" : "admin")
-                              }
-                              className={`p-1 rounded transition-colors ${
-                                userItem.role === "admin"
-                                  ? "text-purple-600 hover:text-purple-900"
-                                  : "text-gray-600 hover:text-purple-600"
-                              }`}
-                              title={userItem.role === "admin" ? "Remove Admin" : "Make Admin"}
-                            >
-                              {userItem.role === "admin" ? (
-                                <ShieldOff className="h-4 w-4" />
-                              ) : (
-                                <Shield className="h-4 w-4" />
-                              )}
-                            </button>
-                          )}
-
-                          {/* Status Toggle */}
-                          {userItem._id !== user._id && (
-                            <button
-                              onClick={() => handleStatusChange(userItem._id, !userItem.isActive)}
-                              className={`p-1 rounded transition-colors ${
-                                userItem.isActive
-                                  ? "text-red-600 hover:text-red-900"
-                                  : "text-green-600 hover:text-green-900"
-                              }`}
-                              title={userItem.isActive ? "Deactivate User" : "Activate User"}
-                            >
-                              {userItem.isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-                            </button>
-                          )}
-
-                          {userItem._id === user._id && <span className="text-xs text-gray-500 italic">You</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={!pagination.hasPrev}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={!pagination.hasNext}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    Showing page <span className="font-medium">{currentPage}</span> of{" "}
-                    <span className="font-medium">{pagination.totalPages}</span>
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                    <button
-                      onClick={() => setCurrentPage(currentPage - 1)}
-                      disabled={!pagination.hasPrev}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+      {error ? (
+        <Panel>
+          <ErrorState title="Customers unavailable" description={error} onRetry={load} size="sm" />
+        </Panel>
+      ) : (
+        <Panel
+          bodyClassName="p-0 sm:p-0"
+          footer={
+            pagination.totalPages > 1 ? (
+              <Pagination
+                currentPage={pagination.currentPage}
+                totalPages={pagination.totalPages}
+                onPageChange={setPage}
+              />
+            ) : null
+          }
+        >
+          <DataTable
+            columns={columns}
+            rows={users}
+            rowKey={(row) => row._id}
+            loading={loading}
+            skeletonRows={PAGE_SIZE}
+            caption="Registered customers"
+            empty={
+              <EmptyState
+                icon={<Users />}
+                title={search || role ? "No customers match" : "No customers yet"}
+                description={
+                  search || role
+                    ? "Try a different name, email, or role."
+                    : "Accounts appear here as people sign up."
+                }
+                size="sm"
+                action={
+                  search || role ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setSearchDraft("")
+                        setRole("")
+                        setPage(1)
+                      }}
                     >
-                      Previous
-                    </button>
-                    {[...Array(pagination.totalPages)].map((_, index) => {
-                      const page = index + 1
-                      return (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                            currentPage === page
-                              ? "z-10 bg-pink-50 border-pink-500 text-pink-600"
-                              : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      )
-                    })}
-                    <button
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                      disabled={!pagination.hasNext}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
-                  </nav>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+                      Clear filters
+                    </Button>
+                  ) : null
+                }
+              />
+            }
+          />
+        </Panel>
+      )}
 
-        {/* Info Box */}
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-blue-900 mb-2">User Management Guidelines</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
-            <li>• Admin users can manage products, orders, and other users</li>
-            <li>• You cannot change your own role or deactivate yourself</li>
-            <li>• Inactive users cannot log in to the system</li>
-            <li>• Be careful when promoting users to admin role</li>
-          </ul>
-        </div>
-      </div>
+      <Panel title="About roles" bodyClassName="p-4 sm:p-5">
+        <ul className="space-y-1.5 text-sm text-gray-600">
+          <li className="flex gap-2">
+            <Shield aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+            Admins can add and delete products, see every order, and change other people's roles.
+          </li>
+          <li className="flex gap-2">
+            <Mail aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+            Customers only see their own account, orders and addresses.
+          </li>
+          <li className="flex gap-2">
+            <UserCog aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+            You can't change your own role or delete your own account from here.
+          </li>
+        </ul>
+      </Panel>
     </div>
   )
 }

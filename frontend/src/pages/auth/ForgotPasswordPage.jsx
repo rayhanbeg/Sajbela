@@ -1,285 +1,230 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { Link } from "react-router-dom"
+import { Mail, MailCheck } from "lucide-react"
+
 import { authAPI } from "../../lib/api"
+import { validateEmail } from "../../lib/utils"
+import AuthLayout, { AuthError } from "../../components/auth/AuthLayout"
+import { Button, FormField, Input } from "../../components/ui"
+
+/**
+ * Request a password reset link.
+ *
+ * This replaces a two-step 6-digit verification-code flow that asked the
+ * shopper to copy a code out of their inbox and type it back alongside a new
+ * password, all on one page. A link is fewer steps, can't be mistyped, and
+ * doesn't leave a short-lived shared secret sitting in an email thread that
+ * also works for anyone reading over a shoulder.
+ *
+ * The page never reveals whether an email is registered — the backend answers
+ * the same way either way, and so does this UI. The old version rendered the
+ * API's literal "User not found with this email address", which turned the
+ * reset form into an account-existence oracle.
+ */
+
+const RESEND_SECONDS = 45
+
+/** "nu***@gmail.com" — enough to confirm which inbox, not enough to leak one. */
+function maskEmail(email = "") {
+  const [name, domain] = email.split("@")
+  if (!domain) return email
+  const head = name.slice(0, 2)
+  return `${head}${"*".repeat(Math.max(3, name.length - 2))}@${domain}`
+}
 
 const ForgotPasswordPage = () => {
-  const [step, setStep] = useState(1) // 1: Email, 2: Code & New Password
+  const [email, setEmail] = useState("")
+  const [fieldError, setFieldError] = useState("")
+  const [submitError, setSubmitError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
-  const [maskedEmail, setMaskedEmail] = useState("")
+  const [sent, setSent] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
 
-  const [formData, setFormData] = useState({
-    email: "",
-    verificationCode: "",
-    newPassword: "",
-    confirmPassword: "",
-  })
+  const timer = useRef(null)
 
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-    setError("")
-  }
+  useEffect(
+    () => () => {
+      if (timer.current) clearInterval(timer.current)
+    },
+    [],
+  )
 
-  const handleSendCode = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError("")
-
-    try {
-      const response = await authAPI.forgotPassword(formData.email)
-      setMaskedEmail(response.data.email)
-      setSuccess(response.data.message)
-      setStep(2)
-    } catch (error) {
-      setError(error.response?.data?.message || "Failed to send verification code")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleResetPassword = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError("")
-
-    // Validate passwords match
-    if (formData.newPassword !== formData.confirmPassword) {
-      setError("Passwords do not match")
-      setLoading(false)
-      return
-    }
-
-    // Validate password length
-    if (formData.newPassword.length < 6) {
-      setError("Password must be at least 6 characters long")
-      setLoading(false)
-      return
-    }
-
-    try {
-      const response = await authAPI.resetPassword({
-        email: formData.email,
-        verificationCode: formData.verificationCode,
-        newPassword: formData.newPassword,
+  const startCooldown = () => {
+    setCooldown(RESEND_SECONDS)
+    if (timer.current) clearInterval(timer.current)
+    timer.current = setInterval(() => {
+      setCooldown((seconds) => {
+        if (seconds <= 1) {
+          clearInterval(timer.current)
+          timer.current = null
+          return 0
+        }
+        return seconds - 1
       })
-      setSuccess(response.data.message)
-      // Redirect to login after 3 seconds
-      setTimeout(() => {
-        window.location.href = "/auth/login"
-      }, 3000)
-    } catch (error) {
-      setError(error.response?.data?.message || "Failed to reset password")
-    } finally {
-      setLoading(false)
-    }
+    }, 1000)
   }
 
-  const handleResendCode = async () => {
+  const send = async (address) => {
+    setSubmitError("")
     setLoading(true)
-    setError("")
 
     try {
-      const response = await authAPI.forgotPassword(formData.email)
-      setSuccess("New verification code sent to your email")
+      await authAPI.forgotPassword(address)
+      setSent(true)
+      startCooldown()
     } catch (error) {
-      setError(error.response?.data?.message || "Failed to resend code")
+      // Only genuine transport/server failures land here now.
+      setSubmitError(error.response?.data?.message || "We couldn't send the email. Please try again.")
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-center min-h-[80vh]">
-          <div className="max-w-md w-full">
-            <div className="bg-white rounded-lg shadow-md p-8">
-              {/* Header */}
-              <div className="text-center mb-8">
-                <div className="mx-auto w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mb-4">
-                  {step === 1 ? (
-                    <svg className="h-8 w-8 text-pink-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                      />
-                    </svg>
-                  ) : (
-                    <svg className="h-8 w-8 text-pink-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                      />
-                    </svg>
-                  )}
-                </div>
-                <h2 className="text-3xl font-bold text-gray-900">
-                  {step === 1 ? "Forgot Password?" : "Reset Password"}
-                </h2>
-                <p className="text-gray-600 mt-2">
-                  {step === 1
-                    ? "Enter your email address and we'll send you a verification code"
-                    : "Enter the verification code and your new password"}
-                </p>
-              </div>
+  const handleSubmit = (event) => {
+    event.preventDefault()
 
-              {/* Success Message */}
-              {success && (
-                <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-800">{success}</p>
-                </div>
-              )}
+    const address = email.trim()
+    if (!address) {
+      setFieldError("Enter the email address on your account")
+      document.getElementById("forgot-email")?.focus()
+      return
+    }
+    if (!validateEmail(address)) {
+      setFieldError("That doesn't look like an email address")
+      document.getElementById("forgot-email")?.focus()
+      return
+    }
 
-              {/* Error Message */}
-              {error && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-800">{error}</p>
-                </div>
-              )}
+    setFieldError("")
+    send(address)
+  }
 
-              {/* Step 1: Email Input */}
-              {step === 1 && (
-                <form onSubmit={handleSendCode} className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                    <input
-                      type="email"
-                      name="email"
-                      required
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="Enter your email address"
-                    />
-                  </div>
+  /* ── Sent ─────────────────────────────────────────────────── */
+  if (sent) {
+    return (
+      <AuthLayout
+        title="Check your email"
+        description={`If an account exists for ${maskEmail(email.trim())}, a reset link is on its way.`}
+        footer={
+          <Link
+            to="/auth/login"
+            className="font-semibold text-pink-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+          >
+            Back to sign in
+          </Link>
+        }
+      >
+        <div className="text-center">
+          <div
+            aria-hidden="true"
+            className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-green-50 text-green-600"
+          >
+            <MailCheck className="h-7 w-7" />
+          </div>
 
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-pink-600 text-white py-2 px-4 rounded-lg hover:bg-pink-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? "Sending Code..." : "Send Verification Code"}
-                  </button>
-                </form>
-              )}
+          <ol className="mx-auto max-w-xs space-y-2.5 text-left text-sm text-gray-600">
+            <li className="flex gap-2.5">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[0.6875rem] font-semibold text-gray-600">
+                1
+              </span>
+              Open the email from Sajbela.
+            </li>
+            <li className="flex gap-2.5">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[0.6875rem] font-semibold text-gray-600">
+                2
+              </span>
+              Tap <span className="font-medium text-gray-900">Reset password</span> — the link works once and expires
+              in 30 minutes.
+            </li>
+            <li className="flex gap-2.5">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[0.6875rem] font-semibold text-gray-600">
+                3
+              </span>
+              Choose a new password and sign in.
+            </li>
+          </ol>
 
-              {/* Step 2: Code & New Password */}
-              {step === 2 && (
-                <form onSubmit={handleResetPassword} className="space-y-6">
-                  {/* Email Display */}
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-sm text-gray-600">
-                      Verification code sent to: <span className="font-medium">{maskedEmail}</span>
-                    </p>
-                  </div>
+          <p className="mt-6 text-xs leading-relaxed text-gray-500">
+            Nothing yet? Check your spam or promotions folder — it can take a minute to arrive.
+          </p>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Verification Code</label>
-                    <input
-                      type="text"
-                      name="verificationCode"
-                      required
-                      value={formData.verificationCode}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 text-center text-lg font-mono"
-                      placeholder="Enter 6-digit code"
-                      maxLength="6"
-                    />
-                    <div className="flex items-center justify-between mt-2">
-                      <p className="text-xs text-gray-500 flex items-center">
-                        <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                        Code expires in 10 minutes
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleResendCode}
-                        disabled={loading}
-                        className="text-xs text-pink-600 hover:text-pink-700 disabled:opacity-50"
-                      >
-                        Resend Code
-                      </button>
-                    </div>
-                  </div>
+          <div className="mt-5 space-y-2.5">
+            <AuthError>{submitError}</AuthError>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                    <input
-                      type="password"
-                      name="newPassword"
-                      required
-                      value={formData.newPassword}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="Enter new password"
-                      minLength="6"
-                    />
-                  </div>
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              loading={loading}
+              loadingText="Sending…"
+              disabled={cooldown > 0}
+              onClick={() => send(email.trim())}
+            >
+              {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend email"}
+            </Button>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                    <input
-                      type="password"
-                      name="confirmPassword"
-                      required
-                      value={formData.confirmPassword}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="Confirm new password"
-                      minLength="6"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-pink-600 text-white py-2 px-4 rounded-lg hover:bg-pink-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? "Resetting Password..." : "Reset Password"}
-                  </button>
-                </form>
-              )}
-
-              {/* Back to Login */}
-              <div className="mt-6 text-center">
-                <a
-                  href="/auth/login"
-                  className="inline-flex items-center text-sm text-pink-600 hover:text-pink-700 font-medium"
-                >
-                  <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                    />
-                  </svg>
-                  Back to Login
-                </a>
-              </div>
-
-              {/* Help Text */}
-              <div className="mt-6 text-center">
-                <p className="text-xs text-gray-500">Having trouble? Contact our support team for assistance.</p>
-              </div>
-            </div>
+            <Button
+              variant="ghost"
+              fullWidth
+              className="text-gray-600"
+              onClick={() => {
+                setSent(false)
+                setSubmitError("")
+              }}
+            >
+              Use a different email
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </AuthLayout>
+    )
+  }
+
+  /* ── Request ──────────────────────────────────────────────── */
+  return (
+    <AuthLayout
+      title="Forgot your password?"
+      description="Enter the email on your account and we'll send you a link to set a new one."
+      footer={
+        <>
+          Remembered it?{" "}
+          <Link
+            to="/auth/login"
+            className="font-semibold text-pink-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+          >
+            Back to sign in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <FormField label="Email address" htmlFor="forgot-email" error={fieldError} required>
+          {(field) => (
+            <Input
+              {...field}
+              type="email"
+              size="lg"
+              autoComplete="email"
+              inputMode="email"
+              autoFocus
+              leftIcon={<Mail />}
+              placeholder="you@example.com"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value)
+                if (fieldError) setFieldError("")
+              }}
+            />
+          )}
+        </FormField>
+
+        <AuthError>{submitError}</AuthError>
+
+        <Button type="submit" size="lg" fullWidth loading={loading} loadingText="Sending link…">
+          Send reset link
+        </Button>
+      </form>
+    </AuthLayout>
   )
 }
 

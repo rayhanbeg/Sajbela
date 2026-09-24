@@ -1,618 +1,622 @@
-import { useState, useEffect } from "react"
-import { useSelector, useDispatch } from "react-redux"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Truck, CreditCard, MapPin, Package, ArrowLeft } from "lucide-react"
+import { useDispatch, useSelector } from "react-redux"
+import {
+  AlertCircle,
+  ArrowLeft,
+  Banknote,
+  Lock,
+  MapPin,
+  Package,
+  ShieldCheck,
+  ShoppingBag,
+  Smartphone,
+  Truck,
+} from "lucide-react"
+
 import { addressesAPI, ordersAPI } from "../lib/api"
+import { cn } from "../lib/cn"
+import { formatPrice, validatePhone } from "../lib/utils"
+import { DISTRICTS } from "../lib/districts"
+import { SHIPPING } from "../lib/navigation"
+import { cartTotals, readCartItem, totalItemCount, variantLabel } from "../lib/cart"
 import { clearCartAsync } from "../lib/store/cartSlice"
-import { formatPrice } from "../lib/utils"
+import {
+  Badge,
+  Breadcrumbs,
+  Button,
+  Checkbox,
+  EmptyState,
+  FormField,
+  Image,
+  Input,
+  RadioCard,
+  Select,
+  Skeleton,
+  Textarea,
+  useToast,
+} from "../components/ui"
+
+/**
+ * Single-page checkout: delivery details, payment method, order summary.
+ *
+ * Structural notes on the rewrite:
+ *  - The old page ran its redirects inside an effect keyed on `[isAuthenticated,
+ *    items, navigate]`. `items` is a new array identity after every cart action,
+ *    so placing an order cleared the cart, the effect re-fired, saw an empty
+ *    cart and pushed to /products — racing the navigate to /order-success. The
+ *    guards are now render-time and `placed` latches so the empty cart we just
+ *    created can't bounce the shopper away from their own confirmation.
+ *  - Errors went to one red bar at the top of the page; on a phone that's off
+ *    screen from the button that triggered it. Field errors now sit on their
+ *    fields, and the submit failure renders next to the submit button.
+ *  - Delivery charge, subtotal and the free-delivery threshold come from
+ *    lib/cart so this page and the cart page can't disagree.
+ *
+ * The page still requires a login. Guest checkout is Phase 5 of the brief and
+ * needs the order model to accept a null `user` plus a `guestInfo` block — the
+ * form below is already shaped for it (name/phone/address are collected here,
+ * not read from the account), so that phase only has to drop the gate.
+ */
+
+const EMPTY_FORM = { fullName: "", phone: "", address: "", district: "", thana: "" }
+
+function validate(form) {
+  const errors = {}
+
+  if (!form.fullName.trim()) errors.fullName = "We need a name for the delivery"
+  if (!form.phone.trim()) errors.phone = "A phone number is required"
+  else if (!validatePhone(form.phone.replace(/\s+/g, ""))) errors.phone = "Enter a valid number, e.g. 01712345678"
+  if (!form.address.trim()) errors.address = "Enter the house, road and area"
+  if (!form.district.trim()) errors.district = "Select a district"
+  if (!form.thana.trim()) errors.thana = "Enter the thana or upazila"
+
+  return errors
+}
 
 const CheckoutPage = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
-  const { items, totalAmount, loading: cartLoading } = useSelector((state) => state.cart)
-  const { isAuthenticated } = useSelector((state) => state.auth)
+  const toast = useToast()
 
+  const { items, loading: cartLoading, initialized } = useSelector((state) => state.cart)
+  const { isAuthenticated, user } = useSelector((state) => state.auth)
+
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [errors, setErrors] = useState({})
   const [paymentMethod, setPaymentMethod] = useState("cash_on_delivery")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-
-  // Address form state - always visible, no buttons
-  const [addressForm, setAddressForm] = useState({
-    fullName: "",
-    address: "",
-    district: "",
-    thana: "",
-    phone: "",
-  })
-  const [addressErrors, setAddressErrors] = useState({})
+  const [saveAddress, setSaveAddress] = useState(true)
   const [addressLoaded, setAddressLoaded] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState("")
+  // Latches once the order is in. Without it, clearing the cart re-triggers the
+  // empty-cart branch mid-navigation and the shopper lands on /products.
+  const [placed, setPlaced] = useState(false)
 
-  // Bangladesh districts for dropdown
-  const bangladeshDistricts = [
-    "Bagerhat",
-    "Bandarban",
-    "Barguna",
-    "Barishal",
-    "Bhola",
-    "Bogura",
-    "Brahmanbaria",
-    "Chandpur",
-    "Chattogram",
-    "Chuadanga",
-    "Cox's Bazar",
-    "Cumilla",
-    "Dhaka",
-    "Dinajpur",
-    "Faridpur",
-    "Feni",
-    "Gaibandha",
-    "Gazipur",
-    "Gopalganj",
-    "Habiganj",
-    "Jamalpur",
-    "Jashore",
-    "Jhalokati",
-    "Jhenaidah",
-    "Joypurhat",
-    "Khagrachhari",
-    "Khulna",
-    "Kishoreganj",
-    "Kurigram",
-    "Kushtia",
-    "Lakshmipur",
-    "Lalmonirhat",
-    "Madaripur",
-    "Magura",
-    "Manikganj",
-    "Meherpur",
-    "Moulvibazar",
-    "Munshiganj",
-    "Mymensingh",
-    "Naogaon",
-    "Narail",
-    "Narayanganj",
-    "Narsingdi",
-    "Natore",
-    "Netrokona",
-    "Nilphamari",
-    "Noakhali",
-    "Pabna",
-    "Panchagarh",
-    "Patuakhali",
-    "Pirojpur",
-    "Rajbari",
-    "Rajshahi",
-    "Rangamati",
-    "Rangpur",
-    "Satkhira",
-    "Shariatpur",
-    "Sherpur",
-    "Sirajganj",
-    "Sunamganj",
-    "Sylhet",
-    "Tangail",
-    "Thakurgaon",
-  ].sort()
+  const lines = items || []
+  const totals = cartTotals(lines, form.district)
+  const count = totalItemCount(lines)
 
   useEffect(() => {
     if (!isAuthenticated) {
-      navigate("/auth/login")
+      navigate(`/auth/login?returnTo=${encodeURIComponent("/checkout")}`, { replace: true })
+    }
+  }, [isAuthenticated, navigate])
+
+  /** Prefill from the saved default address so returning shoppers can just pay. */
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setAddressLoaded(true)
       return
     }
 
-    if (!items || items.length === 0) {
-      navigate("/products")
-      return
-    }
+    let cancelled = false
 
-    // Load default address if available
-    loadDefaultAddress()
-  }, [isAuthenticated, items, navigate])
+    addressesAPI
+      .getAll()
+      .then((response) => {
+        if (cancelled) return
+        const saved = response.data || []
+        const preferred = saved.find((entry) => entry.isDefault) || saved[0]
 
-  const loadDefaultAddress = async () => {
-    try {
-      const response = await addressesAPI.getAll()
-      const addresses = response.data || []
-      const defaultAddress = addresses.find((addr) => addr.isDefault) || addresses[0]
-
-      if (defaultAddress) {
-        setAddressForm({
-          fullName: defaultAddress.fullName || "",
-          address: defaultAddress.address || "",
-          district: defaultAddress.district || "",
-          thana: defaultAddress.thana || "",
-          phone: defaultAddress.phone || "",
+        setForm({
+          fullName: preferred?.fullName || user?.name || "",
+          phone: preferred?.phone || user?.phone || "",
+          address: preferred?.address || "",
+          district: preferred?.district || "",
+          thana: preferred?.thana || "",
         })
-      }
-      setAddressLoaded(true)
-    } catch (error) {
-      console.error("Error loading default address:", error)
-      setAddressLoaded(true)
+        // Nothing to re-save if it came from the address book.
+        setSaveAddress(!preferred)
+      })
+      .catch((error) => {
+        console.error("Could not prefill address:", error)
+        if (!cancelled) setForm((prev) => ({ ...prev, fullName: user?.name || "", phone: user?.phone || "" }))
+      })
+      .finally(() => !cancelled && setAddressLoaded(true))
+
+    return () => {
+      cancelled = true
     }
+  }, [isAuthenticated, user?.name, user?.phone])
+
+  const update = (field) => (event) => {
+    const { value } = event.target
+    setForm((prev) => ({ ...prev, [field]: value }))
+    // Clear this field's error as soon as it's touched; re-validated on submit.
+    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))
   }
 
-  const validateAddressForm = () => {
-    const errors = {}
-
-    if (!addressForm.fullName.trim()) {
-      errors.fullName = "Full name is required"
-    }
-
-    if (!addressForm.phone.trim()) {
-      errors.phone = "Phone number is required"
-    } else if (!/^01[3-9]\d{8}$/.test(addressForm.phone.replace(/\s+/g, ""))) {
-      errors.phone = "Please enter a valid Bangladeshi phone number"
-    }
-
-    if (!addressForm.address.trim()) {
-      errors.address = "Address is required"
-    }
-
-    if (!addressForm.district.trim()) {
-      errors.district = "District is required"
-    }
-
-    if (!addressForm.thana.trim()) {
-      errors.thana = "Thana/Upazila is required"
-    }
-
-    setAddressErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const saveAddressAsDefault = async () => {
-    try {
-      // Save the address to user's account as default
-      const addressData = {
-        fullName: addressForm.fullName,
-        address: addressForm.address,
-        district: addressForm.district,
-        thana: addressForm.thana,
-        phone: addressForm.phone,
-        country: "Bangladesh",
-        isDefault: true,
-      }
-
-      await addressesAPI.create(addressData)
-    } catch (error) {
-      console.error("Error saving address:", error)
-      // Don't block order if address saving fails
-    }
-  }
-
-  const calculateSubtotal = () => {
-    return items.reduce((sum, item) => {
-      const product = item.product || item
-      const price = product.price || item.price || 0
-      const quantity = item.quantity || 1
-      return sum + price * quantity
-    }, 0)
-  }
-
-  const calculateShippingCost = (subtotal, district) => {
-    if (subtotal >= 2000) return 0 // Free shipping for orders above 2000 taka
-
-    if (district) {
-      const districtLower = district.toLowerCase()
-      const isDhaka = districtLower === "dhaka"
-      return isDhaka ? 60 : 120 // 60 for Dhaka, 100 for outside Dhaka
-    }
-
-    return 120 // Default to outside Dhaka
-  }
-
-  const subtotal = calculateSubtotal()
-  const shippingCost = calculateShippingCost(subtotal, addressForm.district)
-  const total = subtotal + shippingCost
-
-  const formatSizeDisplay = (size, product) => {
-    if (!size) return null
-
-    // If product has sizes array, find the matching size with measurement
-    if (product?.sizes && Array.isArray(product.sizes)) {
-      const sizeObj = product.sizes.find((s) => s.size === size)
-      if (sizeObj && sizeObj.measurement) {
-        return `${size} – ${sizeObj.measurement}`
-      }
-    }
-
-    // Fallback to default measurements
-    const defaultMeasurements = {
-      S: "2.4/24",
-      M: "2.6/26",
-      L: "2.8/28",
-      XL: "2.10/30",
-    }
-
-    return `${size} – ${defaultMeasurements[size] || size}`
-  }
-
-  const handlePlaceOrder = async () => {
-    if (!validateAddressForm()) {
-      setError("Please fill in all required address fields correctly")
-      return
-    }
-
-    if (!paymentMethod) {
-      setError("Please select a payment method")
-      return
-    }
-
-    setLoading(true)
-    setError("")
-
-    try {
-      // Save address as default for future orders
-      await saveAddressAsDefault()
-
-      const orderItems = items.map((item) => {
-        const product = item.product || item
-        const selectedColor = item.selectedColor || item.color || null
-        const selectedSize = item.selectedSize || item.size || null
-
+  const orderItems = useMemo(
+    () =>
+      lines.map((item) => {
+        const line = readCartItem(item)
         return {
-          product: product._id || item.productId,
-          name: product.name || item.name,
-          image: product.images?.[0]?.url || product.image || item.image,
-          price: product.price || item.price,
-          quantity: item.quantity,
-          selectedSize: selectedSize,
-          selectedColor: selectedColor,
+          product: line.productId,
+          name: line.name,
+          image: line.image,
+          price: line.price,
+          quantity: line.quantity,
+          selectedSize: line.selectedSize,
+          selectedColor: line.selectedColor,
         }
+      }),
+    [lines],
+  )
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+
+    const found = validate(form)
+    setErrors(found)
+
+    if (Object.keys(found).length > 0) {
+      setSubmitError("Please fix the highlighted fields.")
+      // Move focus to the first problem rather than leaving the shopper to hunt.
+      document.getElementById(`checkout-${Object.keys(found)[0]}`)?.focus()
+      return
+    }
+
+    setSubmitting(true)
+    setSubmitError("")
+
+    try {
+      const response = await ordersAPI.create({
+        orderItems,
+        shippingAddress: {
+          fullName: form.fullName.trim(),
+          address: form.address.trim(),
+          district: form.district,
+          thana: form.thana.trim(),
+          country: "Bangladesh",
+          phone: form.phone.replace(/\s+/g, ""),
+        },
+        paymentMethod,
+        itemsPrice: totals.subtotal,
+        taxPrice: 0,
+        shippingPrice: totals.shipping,
+        totalPrice: totals.total,
       })
 
-      const shippingAddress = {
-        fullName: addressForm.fullName,
-        address: addressForm.address,
-        district: addressForm.district,
-        thana: addressForm.thana,
-        country: "Bangladesh",
-        phone: addressForm.phone,
+      const order = response.data
+      setPlaced(true)
+
+      // Best-effort: a failed address save must never lose a placed order.
+      if (saveAddress) {
+        addressesAPI
+          .create({
+            fullName: form.fullName.trim(),
+            address: form.address.trim(),
+            district: form.district,
+            thana: form.thana.trim(),
+            phone: form.phone.replace(/\s+/g, ""),
+            country: "Bangladesh",
+            isDefault: true,
+          })
+          .catch((error) => console.error("Could not save address for next time:", error))
       }
 
-      const orderData = {
-        orderItems,
-        shippingAddress,
-        paymentMethod,
-        itemsPrice: subtotal,
-        taxPrice: 0,
-        shippingPrice: shippingCost,
-        totalPrice: total,
-      }
+      // The server already empties the cart; this syncs the client.
+      dispatch(clearCartAsync())
 
-      const response = await ordersAPI.create(orderData)
-
-      // Clear cart after successful order
-      await dispatch(clearCartAsync())
-
-      // Generate order number for display
-      const orderNumber = `SJ${Date.now().toString().slice(-6)}`
-
-      // Redirect to success page with order data
       navigate("/order-success", {
+        replace: true,
         state: {
-          orderId: response.data._id,
-          orderNumber: orderNumber,
-          orderData: {
-            ...orderData,
-            totalPrice: total,
-            paymentMethod: paymentMethod,
-          },
+          // The confirmation page derives the reference from the id via
+          // lib/orders, so it can't drift from what the admin table shows.
+          orderId: order?._id,
+          orderData: { ...order, totalPrice: totals.total, paymentMethod },
         },
       })
     } catch (error) {
-      console.error("Order creation error:", error)
-      setError(error.response?.data?.message || "Failed to place order. Please try again.")
+      console.error("Order creation failed:", error)
+      const message = error.response?.data?.message || "We couldn't place your order. Please try again."
+      setSubmitError(message)
+      toast.error("Order not placed", { description: message })
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
   }
 
-  const getShippingLocation = () => {
-    if (addressForm.district) {
-      const district = addressForm.district.toLowerCase()
-      return district === "dhaka" ? "Inside Dhaka" : "Outside Dhaka"
-    }
-    return "Outside Dhaka"
-  }
+  /* ── Guards ───────────────────────────────────────────────── */
 
-  const handleBackToCart = () => {
-    // Use replace to avoid redirect loops
-    navigate("/cart", { replace: true })
-  }
+  if (!isAuthenticated) return null
 
-  if (cartLoading || !addressLoaded) {
+  if (!addressLoaded || (!initialized && cartLoading)) return <CheckoutSkeleton />
+
+  if (lines.length === 0 && !placed) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <div className="h-6 bg-gray-200 rounded animate-pulse mb-4"></div>
-                <div className="space-y-3">
-                  <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                  <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4"></div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-md h-fit">
-              <div className="h-6 bg-gray-200 rounded animate-pulse mb-4"></div>
-              <div className="space-y-3">
-                <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!items || items.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center">
-            <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Your cart is empty</h2>
-            <p className="text-gray-600 mb-4">Add some products to your cart to proceed with checkout.</p>
-            <button
-              onClick={() => navigate("/products")}
-              className="bg-pink-600 text-white px-6 py-2 rounded-lg hover:bg-pink-700 transition-colors"
-            >
-              Continue Shopping
-            </button>
-          </div>
+      <div className="bg-gray-50">
+        <CheckoutHeader />
+        <div className="page-container pb-16 pt-4">
+          <EmptyState
+            icon={<ShoppingBag />}
+            title="There's nothing to check out"
+            description="Your cart is empty. Add something you like and come back."
+            action={<Button to="/products" size="lg">Browse products</Button>}
+            className="rounded-card border border-gray-100 bg-white shadow-card"
+          />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <button
-            onClick={handleBackToCart}
-            className="flex items-center text-pink-600 hover:text-pink-700 transition-colors mb-4"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Cart
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900">Checkout</h1>
-        </div>
+    <div className="bg-gray-50">
+      <CheckoutHeader />
 
-        {error && <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">{error}</div>}
+      <form onSubmit={handleSubmit} noValidate className="page-container pb-8 pt-4 md:pb-14">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_23rem] lg:gap-8">
+          {/* ── Left: details ──────────────────────────────── */}
+          <div className="space-y-5 md:space-y-6">
+            <Panel
+              icon={<MapPin />}
+              title="Delivery details"
+              description="Where should we send your order?"
+              step={1}
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField label="Full name" required error={errors.fullName} htmlFor="checkout-fullName">
+                  {(field) => (
+                    <Input
+                      {...field}
+                      size="lg"
+                      value={form.fullName}
+                      onChange={update("fullName")}
+                      autoComplete="name"
+                      placeholder="e.g. Nusrat Jahan"
+                    />
+                  )}
+                </FormField>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Delivery Address - Direct Input Fields Only */}
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <div className="flex items-center mb-6">
-                <MapPin className="h-5 w-5 text-pink-600 mr-2" />
-                <h2 className="text-xl font-semibold text-gray-900">Delivery Address</h2>
+                <FormField
+                  label="Phone number"
+                  required
+                  error={errors.phone}
+                  hint="We'll call before delivery"
+                  htmlFor="checkout-phone"
+                >
+                  {(field) => (
+                    <Input
+                      {...field}
+                      size="lg"
+                      type="tel"
+                      inputMode="numeric"
+                      value={form.phone}
+                      onChange={update("phone")}
+                      autoComplete="tel"
+                      placeholder="01712345678"
+                    />
+                  )}
+                </FormField>
               </div>
 
-              {/* Address Form - Always Visible, No Buttons */}
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Full Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={addressForm.fullName}
-                      onChange={(e) => setAddressForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
-                        addressErrors.fullName ? "border-red-500" : "border-gray-300"
-                      }`}
-                      placeholder="Enter your full name"
-                    />
-                    {addressErrors.fullName && <p className="text-red-500 text-xs mt-1">{addressErrors.fullName}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      value={addressForm.phone}
-                      onChange={(e) => setAddressForm((prev) => ({ ...prev, phone: e.target.value }))}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
-                        addressErrors.phone ? "border-red-500" : "border-gray-300"
-                      }`}
-                      placeholder="01XXXXXXXXX"
-                    />
-                    {addressErrors.phone && <p className="text-red-500 text-xs mt-1">{addressErrors.phone}</p>}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Full Address <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
+              <FormField
+                label="Full address"
+                required
+                error={errors.address}
+                htmlFor="checkout-address"
+                className="mt-4"
+              >
+                {(field) => (
+                  <Textarea
+                    {...field}
                     rows={3}
-                    value={addressForm.address}
-                    onChange={(e) => setAddressForm((prev) => ({ ...prev, address: e.target.value }))}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
-                      addressErrors.address ? "border-red-500" : "border-gray-300"
-                    }`}
-                    placeholder="House/Flat no, Road no, Area name..."
+                    value={form.address}
+                    onChange={update("address")}
+                    autoComplete="street-address"
+                    placeholder="House / flat, road, area — anything that helps the courier find you"
                   />
-                  {addressErrors.address && <p className="text-red-500 text-xs mt-1">{addressErrors.address}</p>}
-                </div>
+                )}
+              </FormField>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      District <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={addressForm.district}
-                      onChange={(e) => setAddressForm((prev) => ({ ...prev, district: e.target.value }))}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
-                        addressErrors.district ? "border-red-500" : "border-gray-300"
-                      }`}
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <FormField label="District" required error={errors.district} htmlFor="checkout-district">
+                  {(field) => (
+                    <Select
+                      {...field}
+                      size="lg"
+                      value={form.district}
+                      onChange={update("district")}
+                      placeholder="Select district"
+                      autoComplete="address-level1"
                     >
-                      <option value="">Select District</option>
-                      {bangladeshDistricts.map((district) => (
+                      {DISTRICTS.map((district) => (
                         <option key={district} value={district}>
                           {district}
                         </option>
                       ))}
-                    </select>
-                    {addressErrors.district && <p className="text-red-500 text-xs mt-1">{addressErrors.district}</p>}
-                  </div>
+                    </Select>
+                  )}
+                </FormField>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Thana/Upazila <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={addressForm.thana}
-                      onChange={(e) => setAddressForm((prev) => ({ ...prev, thana: e.target.value }))}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-pink-500 focus:border-pink-500 ${
-                        addressErrors.thana ? "border-red-500" : "border-gray-300"
-                      }`}
-                      placeholder="Enter thana/upazila"
+                <FormField label="Thana / upazila" required error={errors.thana} htmlFor="checkout-thana">
+                  {(field) => (
+                    <Input
+                      {...field}
+                      size="lg"
+                      value={form.thana}
+                      onChange={update("thana")}
+                      autoComplete="address-level2"
+                      placeholder="e.g. Dhanmondi"
                     />
-                    {addressErrors.thana && <p className="text-red-500 text-xs mt-1">{addressErrors.thana}</p>}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Method */}
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <div className="flex items-center mb-4">
-                <CreditCard className="h-5 w-5 text-pink-600 mr-2" />
-                <h2 className="text-xl font-semibold text-gray-900">Payment Method</h2>
+                  )}
+                </FormField>
               </div>
 
+              {/* Delivery charge follows the district, so say so where it's chosen. */}
+              <p className="mt-4 flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
+                <Truck aria-hidden="true" className="mt-px h-4 w-4 shrink-0 text-gray-400" />
+                <span>
+                  Inside Dhaka {formatPrice(SHIPPING.insideDhaka)} &middot; outside Dhaka{" "}
+                  {formatPrice(SHIPPING.outsideDhaka)} &middot; free over {formatPrice(SHIPPING.freeThreshold)}.
+                  Delivery takes 2&ndash;3 working days.
+                </span>
+              </p>
+
+              {/* Checkbox spreads className onto the input, so the spacing
+                  goes on a wrapper rather than the control itself. */}
+              <div className="mt-4">
+                <Checkbox
+                  checked={saveAddress}
+                  onChange={(event) => setSaveAddress(event.target.checked)}
+                  label="Save this address for next time"
+                />
+              </div>
+            </Panel>
+
+            <Panel icon={<Banknote />} title="Payment" description="Pay when your order arrives." step={2}>
               <div className="space-y-3">
-                <div
-                  className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                    paymentMethod === "cash_on_delivery"
-                      ? "border-pink-600 bg-pink-50 ring-2 ring-pink-200"
-                      : "border-gray-300 hover:border-pink-300"
-                  }`}
-                  onClick={() => setPaymentMethod("cash_on_delivery")}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">Cash on Delivery</h3>
-                      <p className="text-sm text-gray-600">Pay when you receive your order</p>
-                    </div>
-                    <input
-                      type="radio"
-                      checked={paymentMethod === "cash_on_delivery"}
-                      onChange={() => setPaymentMethod("cash_on_delivery")}
-                      className="text-pink-600 focus:ring-pink-500"
-                    />
-                  </div>
-                </div>
+                <RadioCard
+                  name="payment"
+                  label="Cash on delivery"
+                  description="Hand the courier the exact amount when your parcel arrives."
+                  icon={<Banknote className="h-5 w-5" />}
+                  checked={paymentMethod === "cash_on_delivery"}
+                  onChange={() => setPaymentMethod("cash_on_delivery")}
+                  badge={<Badge tone="success" size="sm">Available</Badge>}
+                />
 
-                <div className="border rounded-lg p-4 opacity-50 cursor-not-allowed">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">bKash</h3>
-                      <p className="text-sm text-gray-600">Coming Soon</p>
-                    </div>
-                    <input type="radio" disabled className="text-pink-600 focus:ring-pink-500" />
-                  </div>
-                </div>
+                <RadioCard
+                  name="payment"
+                  label="bKash"
+                  description="Mobile payment is being set up."
+                  icon={<Smartphone className="h-5 w-5" />}
+                  checked={false}
+                  disabled
+                  badge={<Badge tone="neutral" size="sm">Coming soon</Badge>}
+                />
               </div>
+            </Panel>
+
+            {/* Desktop submit lives under the form; mobile gets the sticky bar. */}
+            <div className="hidden lg:block">
+              <SubmitBlock
+                total={totals.total}
+                submitting={submitting}
+                submitError={submitError}
+                count={count}
+              />
             </div>
           </div>
 
-          {/* Order Summary */}
-          <div className="bg-white p-6 rounded-lg shadow-md h-fit">
-            <div className="flex items-center mb-4">
-              <Package className="h-5 w-5 text-pink-600 mr-2" />
-              <h2 className="text-xl font-semibold text-gray-900">Order Summary</h2>
-            </div>
+          {/* ── Right: summary ─────────────────────────────── */}
+          <aside className="lg:sticky lg:top-24">
+            <div className="overflow-hidden rounded-card border border-gray-100 bg-white shadow-card">
+              <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                  <Package aria-hidden="true" className="h-4 w-4 text-pink-600" />
+                  Your order
+                </h2>
+                <Button to="/cart" variant="ghost" size="xs" className="text-gray-500">
+                  Edit
+                </Button>
+              </div>
 
-            <div className="space-y-4 mb-6">
-              {items.map((item, index) => {
-                const product = item.product || item
-                const selectedSize = item.selectedSize || item.size
-                const selectedColor = item.selectedColor || item.color
+              <ul className="max-h-72 divide-y divide-gray-100 overflow-y-auto">
+                {lines.map((item) => {
+                  const line = readCartItem(item)
+                  const variant = variantLabel(item)
 
-                return (
-                  <div key={index} className="flex items-center space-x-3">
-                    <img
-                      src={
-                        product.images?.[0]?.url || product.image || item.image || "/placeholder.svg?height=48&width=48"
-                      }
-                      alt={product.name || item.name}
-                      className="w-12 h-12 object-cover rounded"
-                    />
-                    <div className="flex-1">
-                      <h3 className="text-sm font-medium text-gray-900">{product.name || item.name}</h3>
-                      <div className="text-xs text-gray-600 space-y-1">
-                        {selectedSize && (
-                          <p>
-                            Size: <span className="font-medium">{formatSizeDisplay(selectedSize, product)}</span>
-                          </p>
-                        )}
-                        {selectedColor && (
-                          <p>
-                            Color: <span className="font-medium">{selectedColor}</span>
-                          </p>
-                        )}
-                        <p>Qty: {item.quantity}</p>
+                  return (
+                    <li key={line.id} className="flex items-center gap-3 px-5 py-3">
+                      <Image
+                        src={line.image}
+                        alt=""
+                        aspect="square"
+                        width={120}
+                        sizes="48px"
+                        rounded="rounded-md"
+                        className="w-12 shrink-0"
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <p className="line-clamp-2 text-sm font-medium text-gray-900">{line.name}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {variant && <>{variant} &middot; </>}Qty {line.quantity}
+                        </p>
                       </div>
-                    </div>
-                    <span className="text-sm font-medium text-gray-900">
-                      {formatPrice((product.price || item.price) * item.quantity)}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
 
-            <div className="border-t pt-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium">{formatPrice(subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Shipping ({getShippingLocation()})</span>
-                <span className="font-medium">{shippingCost === 0 ? "Free" : formatPrice(shippingCost)}</span>
-              </div>
-              {shippingCost === 0 && <p className="text-xs text-green-600">🎉 Free shipping on orders above ৳2000!</p>}
-              <div className="flex justify-between text-lg font-bold border-t pt-2">
-                <span>Total</span>
-                <span>{formatPrice(total)}</span>
-              </div>
-            </div>
+                      <p className="shrink-0 text-sm font-semibold text-gray-900 tabular-nums">
+                        {formatPrice(line.price * line.quantity)}
+                      </p>
+                    </li>
+                  )
+                })}
+              </ul>
 
-            <button
-              onClick={handlePlaceOrder}
-              disabled={loading}
-              className="w-full mt-6 bg-pink-600 text-white py-3 px-4 rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Placing Order...
-                </>
-              ) : (
-                <>
-                  <Truck className="h-4 w-4 mr-2" />
-                  Place Order
-                </>
-              )}
-            </button>
+              <dl className="space-y-2.5 border-t border-gray-100 p-5 text-sm">
+                <div className="flex items-baseline justify-between gap-4">
+                  <dt className="text-gray-600">
+                    Subtotal <span className="text-gray-400">({count} {count === 1 ? "item" : "items"})</span>
+                  </dt>
+                  <dd className="font-medium text-gray-900 tabular-nums">{formatPrice(totals.subtotal)}</dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-4">
+                  <dt className="text-gray-600">Delivery{totals.zone ? ` (${totals.zone})` : ""}</dt>
+                  <dd
+                    className={cn(
+                      "font-medium tabular-nums",
+                      totals.shipping === 0 ? "text-green-600" : "text-gray-900",
+                    )}
+                  >
+                    {totals.shipping === 0 ? "Free" : formatPrice(totals.shipping)}
+                  </dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-4 border-t border-gray-100 pt-3">
+                  <dt className="text-base font-semibold text-gray-900">Total</dt>
+                  <dd className="text-xl font-bold text-gray-900 tabular-nums">{formatPrice(totals.total)}</dd>
+                </div>
+
+                {totals.estimated && (
+                  <p className="pt-1 text-xs leading-relaxed text-gray-500">
+                    Pick your district above for the exact delivery charge.
+                  </p>
+                )}
+              </dl>
+
+              <ul className="space-y-2 border-t border-gray-100 px-5 py-4 text-xs text-gray-600">
+                <li className="flex items-center gap-2">
+                  <ShieldCheck aria-hidden="true" className="h-4 w-4 shrink-0 text-green-600" />
+                  No payment until your parcel arrives
+                </li>
+                <li className="flex items-center gap-2">
+                  <Lock aria-hidden="true" className="h-4 w-4 shrink-0 text-gray-400" />
+                  Your details are only used for this delivery
+                </li>
+              </ul>
+            </div>
+          </aside>
+        </div>
+
+        {/* ── Mobile submit bar ──────────────────────────────── */}
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-40 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-nav backdrop-blur-lg lg:hidden">
+          {submitError && (
+            <p role="alert" className="mb-2 flex items-start gap-1.5 text-xs font-medium text-red-600">
+              <AlertCircle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
+              {submitError}
+            </p>
+          )}
+
+          <div className="flex items-center gap-3">
+            <div className="min-w-0">
+              <p className="text-[0.6875rem] uppercase tracking-wide text-gray-500">Total</p>
+              <p className="text-lg font-bold leading-tight text-gray-900 tabular-nums">{formatPrice(totals.total)}</p>
+            </div>
+            <Button type="submit" size="lg" loading={submitting} className="ml-auto flex-1">
+              Place order
+            </Button>
           </div>
         </div>
-      </div>
+        <div aria-hidden="true" className="h-24 lg:hidden" />
+      </form>
     </div>
   )
 }
+
+/* ── Pieces ─────────────────────────────────────────────────── */
+
+const CheckoutHeader = () => (
+  <div className="border-b border-gray-100 bg-white">
+    <div className="page-container py-4 md:py-5">
+      <Breadcrumbs items={[{ label: "Cart", to: "/cart" }, { label: "Checkout" }]} className="mb-3" />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold text-gray-900 md:text-2xl">Checkout</h1>
+
+        <Button to="/cart" variant="ghost" size="sm" className="text-gray-500">
+          <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+          Back to cart
+        </Button>
+      </div>
+    </div>
+  </div>
+)
+
+/** One titled section of the form. */
+const Panel = ({ icon, title, description, step, children }) => (
+  <section className="overflow-hidden rounded-card border border-gray-100 bg-white shadow-card">
+    <div className="flex items-start gap-3 border-b border-gray-100 px-5 py-4">
+      <span
+        aria-hidden="true"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pink-50 text-pink-600 [&_svg]:h-[1.125rem] [&_svg]:w-[1.125rem]"
+      >
+        {icon}
+      </span>
+
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold text-gray-900">
+          {step && <span className="text-gray-400">{step}. </span>}
+          {title}
+        </h2>
+        {description && <p className="mt-0.5 text-sm text-gray-500">{description}</p>}
+      </div>
+    </div>
+
+    <div className="p-5">{children}</div>
+  </section>
+)
+
+const SubmitBlock = ({ total, submitting, submitError, count }) => (
+  <div className="rounded-card border border-gray-100 bg-white p-5 shadow-card">
+    {submitError && (
+      <p role="alert" className="mb-3 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700">
+        <AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+        {submitError}
+      </p>
+    )}
+
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <p className="text-sm text-gray-500">
+          {count} {count === 1 ? "item" : "items"} &middot; cash on delivery
+        </p>
+        <p className="text-xl font-bold text-gray-900 tabular-nums">{formatPrice(total)}</p>
+      </div>
+
+      <Button type="submit" size="lg" loading={submitting} className="min-w-[12rem]">
+        Place order
+      </Button>
+    </div>
+  </div>
+)
+
+const CheckoutSkeleton = () => (
+  <div className="bg-gray-50">
+    <CheckoutHeader />
+
+    <div className="page-container pb-14 pt-4">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_23rem] lg:gap-8">
+        <div className="space-y-6">
+          <Skeleton className="h-[26rem] w-full" rounded="rounded-card" />
+          <Skeleton className="h-52 w-full" rounded="rounded-card" />
+        </div>
+        <Skeleton className="h-[30rem] w-full" rounded="rounded-card" />
+      </div>
+    </div>
+  </div>
+)
 
 export default CheckoutPage

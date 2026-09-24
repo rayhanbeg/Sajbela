@@ -1,256 +1,235 @@
-import { useState } from "react"
-import { X } from "lucide-react"
+import { useRef, useState } from "react"
+import { Button, Checkbox, FormField, Input, Modal, Select, Textarea, useToast } from "./ui"
 import { addressesAPI } from "../lib/api"
+import { DISTRICTS } from "../lib/districts"
+import { validatePhone } from "../lib/utils"
+
+/**
+ * Add / edit a saved address.
+ *
+ * Changes from the previous version:
+ *  - Sits in the shared <Modal>, so it traps focus, closes on Escape and locks
+ *    background scroll. The old overlay did none of those, and on a phone the
+ *    page behind it scrolled while the form stayed put.
+ *  - The phone field is validated rather than merely required. "Phone number
+ *    is required" passed on `1`, and the order then failed at delivery time.
+ *  - `alert("Failed to save address")` is a toast, and the server's own
+ *    message is shown instead of a generic one.
+ */
+
+const EMPTY = {
+  fullName: "",
+  phone: "",
+  address: "",
+  district: "",
+  thana: "",
+  country: "Bangladesh",
+  isDefault: false,
+}
+
+function validate(form) {
+  const errors = {}
+
+  if (!form.fullName.trim()) errors.fullName = "Enter the recipient's name"
+  else if (form.fullName.trim().length < 2) errors.fullName = "That name looks too short"
+
+  if (!form.phone.trim()) errors.phone = "Enter a phone number"
+  else if (!validatePhone(form.phone)) errors.phone = "Enter an 11-digit number starting with 01"
+
+  if (!form.address.trim()) errors.address = "Enter the street address"
+  else if (form.address.trim().length < 5) errors.address = "Add a bit more detail — house and road"
+
+  if (!form.district) errors.district = "Choose a district"
+  if (!form.thana.trim()) errors.thana = "Enter the thana or upazila"
+
+  return errors
+}
 
 const AddressForm = ({ address, onClose, onSave }) => {
-  const [formData, setFormData] = useState({
-    fullName: address?.fullName || "",
-    phone: address?.phone || "",
-    address: address?.address || "",
-    district: address?.district || "",
-    thana: address?.thana || "",
-    country: address?.country || "Bangladesh",
-    isDefault: address?.isDefault || false,
-  })
-  const [loading, setLoading] = useState(false)
+  const toast = useToast()
+  const isEdit = Boolean(address?._id)
+
+  const [form, setForm] = useState({ ...EMPTY, ...(address || {}) })
   const [errors, setErrors] = useState({})
+  const [saving, setSaving] = useState(false)
+  const firstRender = useRef(true)
 
-  // Bangladesh districts list
-  const districts = [
-    "Bagerhat",
-    "Bandarban",
-    "Barguna",
-    "Barishal",
-    "Bhola",
-    "Bogura",
-    "Brahmanbaria",
-    "Chandpur",
-    "Chattogram",
-    "Chuadanga",
-    "Cox's Bazar",
-    "Cumilla",
-    "Dhaka",
-    "Dinajpur",
-    "Faridpur",
-    "Feni",
-    "Gaibandha",
-    "Gazipur",
-    "Gopalganj",
-    "Habiganj",
-    "Jamalpur",
-    "Jashore",
-    "Jhalokati",
-    "Jhenaidah",
-    "Joypurhat",
-    "Khagrachhari",
-    "Khulna",
-    "Kishoreganj",
-    "Kurigram",
-    "Kushtia",
-    "Lakshmipur",
-    "Lalmonirhat",
-    "Madaripur",
-    "Magura",
-    "Manikganj",
-    "Meherpur",
-    "Moulvibazar",
-    "Munshiganj",
-    "Mymensingh",
-    "Naogaon",
-    "Narail",
-    "Narayanganj",
-    "Narsingdi",
-    "Natore",
-    "Netrokona",
-    "Nilphamari",
-    "Noakhali",
-    "Pabna",
-    "Panchagarh",
-    "Patuakhali",
-    "Pirojpur",
-    "Rajbari",
-    "Rajshahi",
-    "Rangamati",
-    "Rangpur",
-    "Satkhira",
-    "Shariatpur",
-    "Sherpur",
-    "Sirajganj",
-    "Sunamganj",
-    "Sylhet",
-    "Tangail",
-    "Thakurgaon",
-  ]
-
-  const validateForm = () => {
-    const newErrors = {}
-
-    if (!formData.fullName.trim()) newErrors.fullName = "Full name is required"
-    if (!formData.phone.trim()) newErrors.phone = "Phone number is required"
-    if (!formData.address.trim()) newErrors.address = "Address is required"
-    if (!formData.district.trim()) newErrors.district = "District is required"
-    if (!formData.thana.trim()) newErrors.thana = "Thana is required"
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+  const setField = (name, value) => {
+    setForm((prev) => ({ ...prev, [name]: value }))
+    // Clear the error as soon as the shopper starts fixing it, but never add a
+    // new one mid-typing — nagging before they've finished is what made the
+    // old checkout form feel hostile.
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: undefined }))
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const setPhone = (value) => setField("phone", value.replace(/\D/g, "").slice(0, 11))
 
-    if (!validateForm()) return
+  const handleSubmit = async (event) => {
+    event.preventDefault()
 
-    setLoading(true)
+    const found = validate(form)
+    setErrors(found)
+
+    if (Object.keys(found).length > 0) {
+      document.getElementById(`address-${Object.keys(found)[0]}`)?.focus()
+      return
+    }
+
+    const payload = {
+      fullName: form.fullName.trim(),
+      phone: form.phone.trim(),
+      address: form.address.trim(),
+      district: form.district,
+      thana: form.thana.trim(),
+      country: form.country || "Bangladesh",
+      isDefault: Boolean(form.isDefault),
+    }
+
+    setSaving(true)
     try {
-      let savedAddress
-      if (address?._id) {
-        const response = await addressesAPI.update(address._id, formData)
-        savedAddress = response.data.address
-      } else {
-        const response = await addressesAPI.create(formData)
-        savedAddress = response.data.address
-      }
+      const response = isEdit
+        ? await addressesAPI.update(address._id, payload)
+        : await addressesAPI.create(payload)
 
-      onSave(savedAddress)
+      onSave?.(response.data?.address)
+      toast.success(isEdit ? "Address updated" : "Address saved")
       onClose()
     } catch (error) {
       console.error("Save address error:", error)
-      alert("Failed to save address")
+      toast.error("Couldn't save the address", {
+        description: error.response?.data?.message || "Please check your connection and try again.",
+      })
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }))
+  // Autofocus the first field on open, but only once.
+  const focusFirst = (node) => {
+    if (node && firstRender.current) {
+      firstRender.current = false
+      node.focus()
+    }
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">{address?._id ? "Edit Address" : "Add New Address"}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="h-6 w-6" />
-          </button>
+    <Modal
+      open
+      onClose={saving ? undefined : onClose}
+      closeOnBackdrop={!saving}
+      size="lg"
+      title={isEdit ? "Edit address" : "Add a new address"}
+      description="We deliver anywhere in Bangladesh."
+      footer={
+        <div className="flex flex-col-reverse gap-2.5 sm:flex-row">
+          <Button variant="outline" fullWidth disabled={saving} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="address-form" fullWidth loading={saving} loadingText="Saving…">
+            {isEdit ? "Save changes" : "Save address"}
+          </Button>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-            <input
-              type="text"
+      }
+    >
+      <form id="address-form" onSubmit={handleSubmit} noValidate className="space-y-4">
+        <FormField label="Full name" required error={errors.fullName} htmlFor="address-fullName">
+          {(field) => (
+            <Input
+              {...field}
+              ref={focusFirst}
+              size="lg"
               name="fullName"
-              value={formData.fullName}
-              onChange={handleInputChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                errors.fullName ? "border-red-500" : "border-gray-300"
-              }`}
+              autoComplete="name"
+              placeholder="Who is receiving this?"
+              value={form.fullName}
+              onChange={(e) => setField("fullName", e.target.value)}
             />
-            {errors.fullName && <p className="text-red-500 text-sm mt-1">{errors.fullName}</p>}
-          </div>
+          )}
+        </FormField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-            <input
+        <FormField
+          label="Phone number"
+          required
+          error={errors.phone}
+          hint="The courier calls this number before delivery."
+          htmlFor="address-phone"
+        >
+          {(field) => (
+            <Input
+              {...field}
+              size="lg"
               type="tel"
               name="phone"
-              value={formData.phone}
-              onChange={handleInputChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                errors.phone ? "border-red-500" : "border-gray-300"
-              }`}
+              inputMode="numeric"
+              autoComplete="tel"
+              maxLength={11}
+              placeholder="01XXXXXXXXX"
+              value={form.phone}
+              onChange={(e) => setPhone(e.target.value)}
             />
-            {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
-          </div>
+          )}
+        </FormField>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
-            <textarea
+        <FormField label="Street address" required error={errors.address} htmlFor="address-address">
+          {(field) => (
+            <Textarea
+              {...field}
               name="address"
-              value={formData.address}
-              onChange={handleInputChange}
               rows={3}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                errors.address ? "border-red-500" : "border-gray-300"
-              }`}
+              autoComplete="street-address"
+              placeholder="House / flat, road, area"
+              value={form.address}
+              onChange={(e) => setField("address", e.target.value)}
             />
-            {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
-          </div>
+          )}
+        </FormField>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">District *</label>
-              <select
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="District" required error={errors.district} htmlFor="address-district">
+            {(field) => (
+              <Select
+                {...field}
+                size="lg"
                 name="district"
-                value={formData.district}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                  errors.district ? "border-red-500" : "border-gray-300"
-                }`}
+                placeholder="Select district"
+                value={form.district}
+                onChange={(e) => setField("district", e.target.value)}
               >
-                <option value="">Select District</option>
-                {districts.map((district) => (
+                {DISTRICTS.map((district) => (
                   <option key={district} value={district}>
                     {district}
                   </option>
                 ))}
-              </select>
-              {errors.district && <p className="text-red-500 text-sm mt-1">{errors.district}</p>}
-            </div>
+              </Select>
+            )}
+          </FormField>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Thana *</label>
-              <input
-                type="text"
+          <FormField label="Thana / upazila" required error={errors.thana} htmlFor="address-thana">
+            {(field) => (
+              <Input
+                {...field}
+                size="lg"
                 name="thana"
-                value={formData.thana}
-                onChange={handleInputChange}
-                placeholder="e.g., Dhanmondi"
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                  errors.thana ? "border-red-500" : "border-gray-300"
-                }`}
+                placeholder="e.g. Dhanmondi"
+                value={form.thana}
+                onChange={(e) => setField("thana", e.target.value)}
               />
-              {errors.thana && <p className="text-red-500 text-sm mt-1">{errors.thana}</p>}
-            </div>
-          </div>
+            )}
+          </FormField>
+        </div>
 
-          <div>
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                name="isDefault"
-                checked={formData.isDefault}
-                onChange={handleInputChange}
-                className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-              />
-              <span className="ml-2 text-sm text-gray-700">Set as default address</span>
-            </label>
-          </div>
-
-          <div className="flex space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50"
-            >
-              {loading ? "Saving..." : "Save Address"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="rounded-lg bg-gray-50 p-3.5">
+          <Checkbox
+            id="address-isDefault"
+            name="isDefault"
+            checked={Boolean(form.isDefault)}
+            onChange={(e) => setField("isDefault", e.target.checked)}
+            label="Use this as my default address"
+            hint="It'll be filled in automatically at checkout."
+          />
+        </div>
+      </form>
+    </Modal>
   )
 }
 

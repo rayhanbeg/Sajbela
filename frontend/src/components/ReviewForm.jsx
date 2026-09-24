@@ -1,61 +1,84 @@
-import { useState } from "react"
-import { Star, X, Camera } from "lucide-react"
+import { useRef, useState } from "react"
+import { Camera, X } from "lucide-react"
+import { Button, FormField, IconButton, Image, Input, Modal, RatingInput, Textarea, useToast } from "./ui"
 import { reviewsAPI, uploadAPI } from "../lib/api"
 
+/**
+ * Write a product review.
+ *
+ * Changes from the previous version:
+ *  - Sits in the shared <Modal>: focus trap, Escape to close, background
+ *    scroll lock. The old overlay had none of them, so on a phone the page
+ *    behind it scrolled under the form.
+ *  - Four `alert()` calls became toasts, including the one that fired on
+ *    success — a modal dialog to acknowledge a modal dialog.
+ *  - "Please select a rating" was an alert with no visual link to the field.
+ *    It's now inline validation next to the stars.
+ *  - Photo uploads report which files failed instead of throwing the whole
+ *    batch away, and the file input is cleared so re-picking the same file
+ *    after a failed upload actually fires a change event.
+ */
+
+const MAX_IMAGES = 4
+
+const RATING_TEXT = {
+  1: "Poor",
+  2: "Fair",
+  3: "Good",
+  4: "Very good",
+  5: "Excellent",
+}
+
 const ReviewForm = ({ product, orderId, onClose, onReviewSubmitted }) => {
-  const [formData, setFormData] = useState({
-    rating: 0,
-    title: "",
-    comment: "",
-    images: [],
-  })
-  const [hoveredRating, setHoveredRating] = useState(0)
+  const toast = useToast()
+  const fileInputRef = useRef(null)
+
+  const [rating, setRating] = useState(0)
+  const [title, setTitle] = useState("")
+  const [comment, setComment] = useState("")
+  const [images, setImages] = useState([])
+  const [ratingError, setRatingError] = useState("")
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  const handleRatingClick = (rating) => {
-    setFormData({ ...formData, rating })
-  }
+  const busy = uploading || submitting
+  const remaining = MAX_IMAGES - images.length
 
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-  }
-
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files)
+  const handleImageUpload = async (event) => {
+    const files = Array.from(event.target.files || []).slice(0, remaining)
+    // Reset immediately: without this, picking the same file again after a
+    // failed upload is a no-op because the input's value hasn't changed.
+    event.target.value = ""
     if (files.length === 0) return
 
     setUploading(true)
     try {
-      const uploadPromises = files.map((file) => uploadAPI.single(file))
-      const responses = await Promise.all(uploadPromises)
+      const results = await Promise.allSettled(files.map((file) => uploadAPI.single(file)))
 
-      const newImages = responses.map((response) => response.data.imageUrl)
-      setFormData({
-        ...formData,
-        images: [...formData.images, ...newImages].slice(0, 4), // Max 4 images
-      })
-    } catch (error) {
-      console.error("Image upload error:", error)
-      alert("Failed to upload images")
+      const uploaded = results
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => result.value.data?.imageUrl)
+        .filter(Boolean)
+
+      const failed = results.length - uploaded.length
+
+      if (uploaded.length > 0) setImages((prev) => [...prev, ...uploaded].slice(0, MAX_IMAGES))
+
+      if (failed > 0) {
+        toast.error(failed === 1 ? "One photo didn't upload" : `${failed} photos didn't upload`, {
+          description: "Check the file size and try again.",
+        })
+      }
     } finally {
       setUploading(false)
     }
   }
 
-  const removeImage = (index) => {
-    const newImages = formData.images.filter((_, i) => i !== index)
-    setFormData({ ...formData, images: newImages })
-  }
+  const handleSubmit = async (event) => {
+    event.preventDefault()
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    if (formData.rating === 0) {
-      alert("Please select a rating")
+    if (rating === 0) {
+      setRatingError("Pick a star rating")
       return
     }
 
@@ -64,177 +87,188 @@ const ReviewForm = ({ product, orderId, onClose, onReviewSubmitted }) => {
       await reviewsAPI.createReview({
         productId: product._id,
         orderId,
-        ...formData,
+        rating,
+        title: title.trim(),
+        comment: comment.trim(),
+        images,
       })
 
-      alert("Review submitted successfully!")
-      onReviewSubmitted()
+      toast.success("Thanks for your review", { description: "It'll appear on the product page shortly." })
+      onReviewSubmitted?.()
       onClose()
     } catch (error) {
       console.error("Submit review error:", error)
-      alert(error.response?.data?.message || "Failed to submit review")
+      toast.error("Couldn't submit your review", {
+        description: error.response?.data?.message || "Please check your connection and try again.",
+      })
     } finally {
       setSubmitting(false)
     }
   }
 
-  const getRatingText = (rating) => {
-    const texts = {
-      1: "Poor",
-      2: "Fair",
-      3: "Good",
-      4: "Very Good",
-      5: "Excellent",
-    }
-    return texts[rating] || ""
-  }
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Write a Review</h2>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Product Info */}
-          <div className="flex items-center mb-6 p-4 bg-gray-50 rounded-lg">
-            <img
-              src={product.images?.[0]?.url || product.image || "/placeholder.svg"}
-              alt={product.name}
-              className="w-16 h-16 object-cover rounded"
-            />
-            <div className="ml-4">
-              <h3 className="font-semibold text-gray-900">{product.name}</h3>
-              <p className="text-sm text-gray-600">Share your experience with this product</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Rating */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Rating *</label>
-              <div className="flex items-center space-x-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    onClick={() => handleRatingClick(star)}
-                    onMouseEnter={() => setHoveredRating(star)}
-                    onMouseLeave={() => setHoveredRating(0)}
-                    className="p-1"
-                  >
-                    <Star
-                      className={`h-8 w-8 ${
-                        star <= (hoveredRating || formData.rating) ? "text-yellow-400 fill-current" : "text-gray-300"
-                      }`}
-                    />
-                  </button>
-                ))}
-                {formData.rating > 0 && (
-                  <span className="ml-2 text-sm font-medium text-gray-700">{getRatingText(formData.rating)}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Title */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Review Title</label>
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleInputChange}
-                placeholder="Summarize your review in a few words"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                maxLength={100}
-              />
-            </div>
-
-            {/* Comment */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Your Review</label>
-              <textarea
-                name="comment"
-                value={formData.comment}
-                onChange={handleInputChange}
-                placeholder="Tell others about your experience with this product..."
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                maxLength={1000}
-              />
-              <p className="text-xs text-gray-500 mt-1">{formData.comment.length}/1000 characters</p>
-            </div>
-
-            {/* Image Upload */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Add Photos (Optional)</label>
-              <div className="space-y-4">
-                {/* Upload Button */}
-                <div className="flex items-center">
-                  <label className="cursor-pointer flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-                    <Camera className="h-5 w-5 mr-2" />
-                    {uploading ? "Uploading..." : "Add Photos"}
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      disabled={uploading || formData.images.length >= 4}
-                    />
-                  </label>
-                  <span className="ml-2 text-xs text-gray-500">Max 4 photos</span>
-                </div>
-
-                {/* Image Preview */}
-                {formData.images.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {formData.images.map((image, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={image || "/placeholder.svg"}
-                          alt={`Review ${index + 1}`}
-                          className="w-full h-20 object-cover rounded border"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(index)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Submit Buttons */}
-            <div className="flex space-x-4 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting || formData.rating === 0}
-                className="flex-1 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? "Submitting..." : "Submit Review"}
-              </button>
-            </div>
-          </form>
+    <Modal
+      open
+      onClose={busy ? undefined : onClose}
+      closeOnBackdrop={!busy}
+      size="lg"
+      title="Write a review"
+      description="Reviews are public and shown with your first name."
+      footer={
+        <div className="flex flex-col-reverse gap-2.5 sm:flex-row">
+          <Button variant="outline" fullWidth disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="review-form"
+            fullWidth
+            loading={submitting}
+            loadingText="Posting…"
+            disabled={uploading}
+          >
+            Post review
+          </Button>
+        </div>
+      }
+    >
+      <div className="mb-6 flex items-center gap-4 rounded-lg bg-gray-50 p-3.5">
+        <Image
+          src={product.images?.[0]?.url || product.image}
+          alt={product.name || ""}
+          aspect="square"
+          width={160}
+          sizes="56px"
+          className="h-14 w-14 shrink-0"
+          rounded="rounded-lg"
+        />
+        <div className="min-w-0">
+          <h3 className="font-medium leading-snug text-gray-900">{product.name}</h3>
+          <p className="mt-0.5 text-sm text-gray-600">How was it?</p>
         </div>
       </div>
-    </div>
+
+      <form id="review-form" onSubmit={handleSubmit} noValidate className="space-y-5">
+        {/* Not a <FormField>: the stars are a radiogroup, and a <label for> can't
+            point at one, so the label is a plain span with its own error line. */}
+        <div>
+          <span className="mb-1.5 block text-sm font-medium text-gray-700">
+            Your rating
+            <span className="ml-0.5 text-red-500" aria-hidden="true">
+              *
+            </span>
+          </span>
+
+          <div className="flex items-center gap-3">
+            <RatingInput
+              value={rating}
+              size="lg"
+              disabled={submitting}
+              onChange={(value) => {
+                setRating(value)
+                setRatingError("")
+              }}
+            />
+            {rating > 0 && <span className="text-sm font-medium text-gray-700">{RATING_TEXT[rating]}</span>}
+          </div>
+
+          {ratingError && (
+            <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">
+              {ratingError}
+            </p>
+          )}
+        </div>
+
+        <FormField label="Headline" hint="Optional — a few words that sum it up." htmlFor="review-title">
+          {(field) => (
+            <Input
+              {...field}
+              size="lg"
+              name="title"
+              maxLength={100}
+              placeholder="e.g. Looks even better in person"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          )}
+        </FormField>
+
+        <FormField
+          label="Your review"
+          hint={`${comment.length}/1000 characters`}
+          htmlFor="review-comment"
+        >
+          {(field) => (
+            <Textarea
+              {...field}
+              name="comment"
+              rows={4}
+              maxLength={1000}
+              placeholder="What did you like? How was the quality, the fit, the delivery?"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+            />
+          )}
+        </FormField>
+
+        <div>
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <span className="block text-sm font-medium text-gray-700">Photos</span>
+            <span className="text-xs text-gray-500">Up to {MAX_IMAGES}</span>
+          </div>
+
+          {images.length > 0 && (
+            <ul className="mb-3 grid grid-cols-4 gap-2">
+              {images.map((image, index) => (
+                <li key={image} className="relative">
+                  <Image
+                    src={image}
+                    alt={`Photo ${index + 1}`}
+                    aspect="square"
+                    width={200}
+                    sizes="100px"
+                    rounded="rounded-lg"
+                  />
+                  <IconButton
+                    type="button"
+                    size="xs"
+                    variant="solid"
+                    label={`Remove photo ${index + 1}`}
+                    className="absolute -right-1.5 -top-1.5 bg-gray-900 hover:bg-gray-800"
+                    onClick={() => setImages((prev) => prev.filter((_, i) => i !== index))}
+                  >
+                    <X />
+                  </IconButton>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="md"
+            loading={uploading}
+            loadingText="Uploading…"
+            disabled={remaining === 0 || submitting}
+            leftIcon={<Camera className="h-4 w-4" />}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {remaining === 0 ? "Photo limit reached" : "Add photos"}
+          </Button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*"
+            className="hidden"
+            tabIndex={-1}
+            onChange={handleImageUpload}
+          />
+        </div>
+      </form>
+    </Modal>
   )
 }
 

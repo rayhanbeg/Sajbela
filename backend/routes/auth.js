@@ -4,6 +4,7 @@ import {
   register,
   login,
   forgotPassword,
+  verifyResetToken,
   resetPassword,
   getProfile,
   updateProfile,
@@ -15,6 +16,8 @@ const router = express.Router()
 router.post("/register", register)
 router.post("/login", login)
 router.post("/forgot-password", forgotPassword)
+// GET is a pre-flight check for the reset page; POST performs the reset.
+router.get("/reset-password/:token", verifyResetToken)
 router.post("/reset-password", resetPassword)
 router.get("/profile", auth, getProfile)
 router.put("/profile", auth, updateProfile)

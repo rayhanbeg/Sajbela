@@ -34,42 +34,55 @@ export const testEmailConfig = async () => {
   }
 }
 
-// Send verification code email
-export const sendVerificationCode = async (email, code, name) => {
+// Send password reset link email
+//
+// Replaces the old 6-digit verification code. A code had to be copied out of
+// the inbox and retyped, expired in 10 minutes, and — because it was stored in
+// plaintext on the user document — was readable by anyone with database access.
+// The link carries a single-use token that only exists hashed in the database.
+export const sendPasswordResetLink = async (email, name, resetUrl) => {
   try {
-    console.log(`📧 Attempting to send verification code to: ${email}`)
+    console.log(`📧 Attempting to send password reset link to: ${email}`)
     const transporter = createTransporter()
 
     const mailOptions = {
       from: `"Sajbela Support" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: "Password Reset Verification Code - Sajbela",
+      subject: "Reset your Sajbela password",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 30px;">
             <h1 style="color: #e91e63; margin: 0;">সাজবেলা - Sajbela</h1>
             <p style="color: #666; margin: 5px 0;">Your Beauty, Our Priority</p>
           </div>
-          
-          <div style="background: #f8f9fa; padding: 30px; border-radius: 10px; text-align: center;">
-            <h2 style="color: #333; margin-bottom: 20px;">Password Reset Request</h2>
+
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 10px;">
+            <h2 style="color: #333; margin-bottom: 20px; text-align: center;">Reset your password</h2>
             <p style="color: #666; margin-bottom: 20px;">Hello ${name},</p>
             <p style="color: #666; margin-bottom: 30px;">
-              You requested to reset your password. Use the verification code below to proceed:
+              We received a request to reset the password for your Sajbela account.
+              Tap the button below to choose a new one.
             </p>
-            
-            <div style="background: #fff; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <h1 style="color: #e91e63; font-size: 32px; letter-spacing: 5px; margin: 0;">${code}</h1>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}"
+                 style="background: #e91e63; color: white; padding: 14px 32px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                Reset password
+              </a>
             </div>
-            
-            <p style="color: #666; font-size: 14px; margin-top: 20px;">
-              This code will expire in 10 minutes for security reasons.
+
+            <p style="color: #666; font-size: 14px; margin-bottom: 8px;">
+              This link works once and expires in 30 minutes.
             </p>
-            <p style="color: #666; font-size: 14px;">
-              If you didn't request this, please ignore this email.
+            <p style="color: #666; font-size: 14px; margin-bottom: 20px;">
+              If you didn't request this, you can safely ignore this email — your password stays as it is.
+            </p>
+
+            <p style="color: #999; font-size: 12px; margin: 0; word-break: break-all;">
+              Button not working? Paste this into your browser:<br>${resetUrl}
             </p>
           </div>
-          
+
           <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
             <p style="color: #999; font-size: 12px;">
               © 2024 Sajbela. All rights reserved.<br>
@@ -81,7 +94,7 @@ export const sendVerificationCode = async (email, code, name) => {
     }
 
     const result = await transporter.sendMail(mailOptions)
-    console.log("✅ Verification email sent successfully:", result.messageId)
+    console.log("✅ Password reset email sent successfully:", result.messageId)
     return { success: true, messageId: result.messageId }
   } catch (error) {
     console.error("❌ Email sending error:", error)

@@ -19,6 +19,7 @@ import AccountPage from "./pages/AccountPage"
 import LoginPage from "./pages/auth/LoginPage"
 import RegisterPage from "./pages/auth/RegisterPage"
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage"
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage"
 import NotFoundPage from "./pages/NotFoundPage"
 
 // Informational pages — split out, they're rarely the entry point.
@@ -59,13 +60,19 @@ const adminRoute = (element) => <ProtectedRoute adminOnly>{element}</ProtectedRo
 
 function App() {
   const dispatch = useDispatch()
-  const { token, isAuthenticated } = useSelector((state) => state.auth)
+  const { token } = useSelector((state) => state.auth)
 
+  // Re-hydrate the session from the token on every load.
+  //
+  // This used to be gated on `&& !isAuthenticated`, which could never be true:
+  // the slice initialises `isAuthenticated` to `!!token`. So the profile was
+  // never fetched, and the cached `user` from login — which omits `_id` and
+  // `createdAt` — was all the app ever had.
   useEffect(() => {
-    if (token && !isAuthenticated) {
+    if (token) {
       dispatch(fetchUserProfile())
     }
-  }, [dispatch, token, isAuthenticated])
+  }, [dispatch, token])
 
   return (
     <ToastProvider>
@@ -100,6 +107,8 @@ function App() {
               <Route path="/auth/login" element={<LoginPage />} />
               <Route path="/auth/register" element={<RegisterPage />} />
               <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+              {/* Landed on from the emailed link: /auth/reset-password?token=… */}
+              <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
 
               {/* Info — these were previously commented out, leaving dead footer links. */}
               <Route path="/about" element={<AboutPage />} />

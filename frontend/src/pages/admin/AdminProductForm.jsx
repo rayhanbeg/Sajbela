@@ -1,853 +1,910 @@
-
-import { useState, useEffect } from "react"
-import { useSelector, useDispatch } from "react-redux"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Upload, X, Save, ArrowLeft, Plus, Minus } from "lucide-react"
-import { createProduct, updateProduct, fetchProductById, clearCurrentProduct } from "../../lib/store/productSlice"
-import { uploadAPI } from "../../lib/api"
+import {
+  ArrowLeft,
+  Boxes,
+  GripVertical,
+  ImagePlus,
+  Info,
+  Loader2,
+  Palette,
+  Ruler,
+  Save,
+  Sparkles,
+  Tag,
+  Trash2,
+  X,
+} from "lucide-react"
+import { AdminPageHeader, FormSection } from "../../components/admin"
+import {
+  Badge,
+  Button,
+  Checkbox,
+  ErrorState,
+  FormField,
+  IconButton,
+  Input,
+  Select,
+  Skeleton,
+  Textarea,
+  useConfirm,
+  useToast,
+} from "../../components/ui"
+import { productsAPI, uploadAPI } from "../../lib/api"
+import {
+  BANGLE_SIZES,
+  PRODUCT_CATEGORIES,
+  PRODUCT_COLORS,
+  PRODUCT_FLAGS,
+  imagePublicId,
+  isSizedCategory,
+  swatch,
+} from "../../lib/products"
+import { formatPrice } from "../../lib/utils"
+
+/**
+ * Create / edit a product.
+ *
+ * Four field names in the old form didn't match the schema, so the data they
+ * collected was silently dropped by Mongoose on save:
+ *
+ *  - colours were written as `hexCode`; the schema field is `code`, so every
+ *    swatch on the storefront fell back to grey
+ *  - images were written as `publicId`; the schema field is `public_id`, so
+ *    deleting an image from a saved product could never remove it from
+ *    Cloudinary — the id wasn't there to send
+ *  - `specifications.size` isn't in the schema at all (it's `dimensions`)
+ *  - `subcategory` isn't in the schema at all
+ *
+ * `isActive` was also hard-coded to `true` on every save, which un-retired any
+ * product the moment you edited it. It's a real control now.
+ *
+ * The form talks to the API directly rather than through the product slice:
+ * that slice is the storefront's, and dispatching into it from here replaced
+ * the shopper's current product and list with admin data.
+ */
+
+const EMPTY_FORM = {
+  name: "",
+  description: "",
+  price: "",
+  originalPrice: "",
+  category: "bangles",
+  stock: "",
+  tags: "",
+  specifications: { material: "", color: "", dimensions: "", weight: "" },
+  sizes: [],
+  colors: [],
+  featured: false,
+  isNewArrival: false,
+  isCombo: false,
+  isActive: true,
+}
+
+const toForm = (product) => ({
+  name: product.name || "",
+  description: product.description || "",
+  price: product.price ?? "",
+  originalPrice: product.originalPrice ?? "",
+  category: product.category || "bangles",
+  stock: product.stock ?? "",
+  tags: (product.tags || []).join(", "),
+  specifications: {
+    material: product.specifications?.material || "",
+    color: product.specifications?.color || "",
+    dimensions: product.specifications?.dimensions || "",
+    weight: product.specifications?.weight || "",
+  },
+  sizes: (product.sizes || []).map((size) => ({
+    size: size.size,
+    measurement: size.measurement || "",
+    stock: size.stock ?? 0,
+    available: size.available !== false,
+  })),
+  colors: (product.colors || []).map((color) => ({
+    name: color.name,
+    // Read `hexCode` too: products saved by the old form stored nothing in
+    // `code`, and this is the one chance to repair them on the next save.
+    code: color.code || color.hexCode || "#E5E7EB",
+    stock: color.stock ?? 0,
+    available: color.available !== false,
+  })),
+  featured: Boolean(product.featured),
+  isNewArrival: Boolean(product.isNewArrival),
+  isCombo: Boolean(product.isCombo),
+  isActive: product.isActive !== false,
+})
+
+const VariantRow = ({ children, onRemove, removeLabel }) => (
+  <li className="flex items-start gap-2 rounded-card border border-gray-200 bg-gray-50/60 p-3">
+    <GripVertical aria-hidden="true" className="mt-2.5 hidden h-4 w-4 shrink-0 text-gray-300 sm:block" />
+    <div className="grid min-w-0 flex-1 gap-2.5 sm:grid-cols-[1fr,7rem,auto] sm:items-end">{children}</div>
+    <IconButton label={removeLabel} size="sm" variant="danger" className="mt-1" onClick={onRemove}>
+      <Trash2 />
+    </IconButton>
+  </li>
+)
 
 const AdminProductForm = () => {
   const { id } = useParams()
   const navigate = useNavigate()
-  const dispatch = useDispatch()
-  const { user, isAuthenticated } = useSelector((state) => state.auth)
-  const { currentProduct, loading } = useSelector((state) => state.products)
+  const toast = useToast()
+  const confirm = useConfirm()
+  const fileInputRef = useRef(null)
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    price: "",
-    originalPrice: "",
-    category: "bangles",
-    subcategory: "",
-    stock: "",
-    tags: "",
-    specifications: {
-      material: "",
-      color: "",
-      size: "",
-      weight: "",
-    },
-    sizes: [],
-    colors: [],
-    featured: false,
-    isNewArrival: false,
-    isCombo: false,
-  })
+  const isEdit = Boolean(id)
 
+  const [form, setForm] = useState(EMPTY_FORM)
   const [images, setImages] = useState([])
+  const [loading, setLoading] = useState(isEdit)
+  const [loadError, setLoadError] = useState(null)
+  const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [errors, setErrors] = useState({})
 
-  const categories = [
-    { value: "bangles", label: "Bangles" },
-    { value: "earrings", label: "Earrings" },
-    { value: "cosmetics", label: "Cosmetics" },
-    { value: "necklaces", label: "Necklaces" },
-    { value: "rings", label: "Rings" },
-    { value: "alna", label: "Alna" },
-    { value: "combo", label: "Combo" },
-  ]
+  const sized = isSizedCategory(form.category)
 
-  const sizeOptions = [
-    { size: "S", measurement: "2.4/24" },
-    { size: "M", measurement: "2.6/26" },
-    { size: "L", measurement: "2.8/28" },
-    { size: "XL", measurement: "2.10/30" },
-  ]
+  const loadProduct = useCallback(async () => {
+    if (!id) return
 
-  const predefinedColors = [
-    { name: "Multi Color", hexCode: "#FF6B6B" }, // Add this as the first option
-    { name: "Red", hexCode: "#FF0000" },
-    { name: "Blue", hexCode: "#0000FF" },
-    { name: "Green", hexCode: "#00FF00" },
-    { name: "Yellow", hexCode: "#FFFF00" },
-    { name: "Purple", hexCode: "#800080" },
-    { name: "Orange", hexCode: "#FFA500" },
-    { name: "Pink", hexCode: "#FFC0CB" },
-    { name: "Black", hexCode: "#000000" },
-    { name: "White", hexCode: "#FFFFFF" },
-    { name: "Gold", hexCode: "#FFD700" },
-    { name: "Silver", hexCode: "#C0C0C0" },
-    { name: "Rose Gold", hexCode: "#E8B4B8" },
-  ]
-
-  useEffect(() => {
-    if (!isAuthenticated || user?.role !== "admin") {
-      navigate("/auth/login")
-      return
-    }
-
-    if (id) {
-      dispatch(fetchProductById(id))
-    }
-
-    return () => {
-      dispatch(clearCurrentProduct())
-    }
-  }, [dispatch, id, isAuthenticated, user, navigate])
-
-  useEffect(() => {
-    if (currentProduct && id) {
-      console.log("📦 Loading product data:", currentProduct)
-      setFormData({
-        name: currentProduct.name || "",
-        description: currentProduct.description || "",
-        price: currentProduct.price || "",
-        originalPrice: currentProduct.originalPrice || "",
-        category: currentProduct.category || "bangles",
-        subcategory: currentProduct.subcategory || "",
-        stock: currentProduct.stock || "",
-        tags: currentProduct.tags?.join(", ") || "",
-        specifications: {
-          material: currentProduct.specifications?.material || "",
-          color: currentProduct.specifications?.color || "",
-          size: currentProduct.specifications?.size || "",
-          weight: currentProduct.specifications?.weight || "",
-        },
-        sizes: currentProduct.sizes || [],
-        colors: currentProduct.colors || [],
-        featured: currentProduct.featured || false,
-        isNewArrival: currentProduct.isNewArrival || false,
-        isCombo: currentProduct.isCombo || false,
-      })
-      setImages(currentProduct.images || [])
-
-      console.log("🎨 Loaded colors:", currentProduct.colors)
-      console.log("📏 Loaded sizes:", currentProduct.sizes)
-    }
-  }, [currentProduct, id])
-
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target
-
-    if (name.startsWith("specifications.")) {
-      const specField = name.split(".")[1]
-      setFormData((prev) => ({
-        ...prev,
-        specifications: {
-          ...prev.specifications,
-          [specField]: value,
-        },
-      }))
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: type === "checkbox" ? checked : value,
-      }))
-    }
-  }
-
-  const handleSizeChange = (index, field, value) => {
-    const updatedSizes = [...formData.sizes]
-
-    if (field === "size") {
-      const selectedOption = sizeOptions.find((opt) => opt.size === value)
-      updatedSizes[index] = {
-        ...updatedSizes[index],
-        size: value,
-        measurement: selectedOption?.measurement || updatedSizes[index].measurement || "",
-      }
-    } else {
-      updatedSizes[index] = {
-        ...updatedSizes[index],
-        [field]: field === "stock" ? Number(value) || 0 : field === "available" ? Boolean(value) : value,
-      }
-    }
-
-    console.log("📏 Updated sizes:", updatedSizes)
-    setFormData((prev) => ({
-      ...prev,
-      sizes: updatedSizes,
-    }))
-  }
-
-  const handleColorChange = (index, field, value) => {
-    const updatedColors = [...formData.colors]
-
-    if (field === "name") {
-      const selectedColor = predefinedColors.find((color) => color.name === value)
-      updatedColors[index] = {
-        ...updatedColors[index],
-        name: value,
-        hexCode: selectedColor?.hexCode || updatedColors[index].hexCode || "#000000",
-      }
-    } else {
-      updatedColors[index] = {
-        ...updatedColors[index],
-        [field]: field === "stock" ? Number(value) || 0 : field === "available" ? Boolean(value) : value,
-      }
-    }
-
-    console.log("🎨 Updated colors:", updatedColors)
-    setFormData((prev) => ({
-      ...prev,
-      colors: updatedColors,
-    }))
-  }
-
-  const addSize = () => {
-    const usedSizes = formData.sizes.map((s) => s.size)
-    const availableSize = sizeOptions.find((option) => !usedSizes.includes(option.size))
-    const newSize = availableSize || sizeOptions[0]
-
-    const newSizeObj = {
-      size: newSize.size,
-      measurement: newSize.measurement,
-      stock: 0,
-      available: true,
-    }
-
-    console.log("➕ Adding new size:", newSizeObj)
-    setFormData((prev) => ({
-      ...prev,
-      sizes: [...prev.sizes, newSizeObj],
-    }))
-  }
-
-  const addColor = () => {
-    const usedColors = formData.colors.map((c) => c.name)
-    const availableColor = predefinedColors.find((color) => !usedColors.includes(color.name))
-    const newColor = availableColor || predefinedColors[0]
-
-    const newColorObj = {
-      name: newColor.name,
-      hexCode: newColor.hexCode,
-      stock: 0,
-      available: true,
-    }
-
-    console.log("🎨 Adding new color:", newColorObj)
-    setFormData((prev) => ({
-      ...prev,
-      colors: [...prev.colors, newColorObj],
-    }))
-  }
-
-  const removeSize = (index) => {
-    console.log("➖ Removing size at index:", index)
-    setFormData((prev) => ({
-      ...prev,
-      sizes: prev.sizes.filter((_, i) => i !== index),
-    }))
-  }
-
-  const removeColor = (index) => {
-    console.log("🗑️ Removing color at index:", index)
-    setFormData((prev) => ({
-      ...prev,
-      colors: prev.colors.filter((_, i) => i !== index),
-    }))
-  }
-
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files)
-    if (files.length === 0) return
-
-    console.log("📤 Starting image upload for", files.length, "files")
-    setUploading(true)
+    setLoading(true)
+    setLoadError(null)
 
     try {
-      const uploadPromises = files.map(async (file) => {
-        console.log("📁 Uploading file:", file.name)
-        const response = await uploadAPI.single(file)
-        console.log("✅ Upload response:", response.data)
-        return response
-      })
+      const { data } = await productsAPI.getById(id)
+      setForm(toForm(data))
+      setImages(data.images || [])
+    } catch (err) {
+      setLoadError(err.response?.data?.message || "Could not load this product.")
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
 
-      const responses = await Promise.all(uploadPromises)
+  useEffect(() => {
+    loadProduct()
+  }, [loadProduct])
 
-      const newImages = responses.map((response) => ({
-        url: response.data.imageUrl || response.data.url, // Handle both possible response formats
-        publicId: response.data.publicId || response.data.public_id, // Handle both formats
-        alt: formData.name,
+  const setField = (name, value) => {
+    setForm((prev) => ({ ...prev, [name]: value }))
+    setErrors((prev) => (prev[name] ? { ...prev, [name]: undefined } : prev))
+  }
+
+  const setSpec = (name, value) =>
+    setForm((prev) => ({ ...prev, specifications: { ...prev.specifications, [name]: value } }))
+
+  // ---- variants -----------------------------------------------------------
+
+  const addSize = () => {
+    const used = form.sizes.map((row) => row.size)
+    const next = BANGLE_SIZES.find((option) => !used.includes(option.size))
+    if (!next) return
+
+    setField("sizes", [...form.sizes, { ...next, stock: 0, available: true }])
+  }
+
+  const updateSize = (index, patch) =>
+    setField(
+      "sizes",
+      form.sizes.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
+    )
+
+  const addColor = () => {
+    const used = form.colors.map((row) => row.name)
+    const next = PRODUCT_COLORS.find((option) => !used.includes(option.name))
+    if (!next) return
+
+    setField("colors", [...form.colors, { ...next, stock: 0, available: true }])
+  }
+
+  const updateColor = (index, patch) =>
+    setField(
+      "colors",
+      form.colors.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
+    )
+
+  // ---- images -------------------------------------------------------------
+
+  const handleUpload = async (event) => {
+    const files = Array.from(event.target.files || [])
+    // Reset immediately so picking the same file twice still fires a change.
+    event.target.value = ""
+    if (files.length === 0) return
+
+    setUploading(true)
+
+    // allSettled, not all: one rejected upload used to discard the images that
+    // had already succeeded alongside it.
+    const results = await Promise.allSettled(files.map((file) => uploadAPI.single(file)))
+
+    const uploaded = results
+      .filter((result) => result.status === "fulfilled")
+      .map(({ value }) => ({
+        url: value.data.imageUrl || value.data.url,
+        // The schema field is `public_id`. The upload endpoint answers with
+        // `publicId`, so the rename happens here.
+        public_id: value.data.publicId || value.data.public_id,
       }))
 
-      console.log("🖼️ New images added:", newImages)
-      setImages((prev) => [...prev, ...newImages])
-    } catch (error) {
-      console.error("❌ Upload error:", error)
-      alert(`Failed to upload images: ${error.response?.data?.message || error.message}`)
-    } finally {
-      setUploading(false)
+    const failed = results.length - uploaded.length
+
+    if (uploaded.length > 0) {
+      setImages((prev) => [...prev, ...uploaded])
+      setErrors((prev) => ({ ...prev, images: undefined }))
     }
+
+    if (failed > 0) {
+      toast.error(`${failed} image${failed === 1 ? "" : "s"} failed to upload`, {
+        description: "Check the file size and format, then try again.",
+      })
+    } else {
+      toast.success(`${uploaded.length} image${uploaded.length === 1 ? "" : "s"} added`)
+    }
+
+    setUploading(false)
   }
 
   const removeImage = async (index) => {
     const image = images[index]
-    console.log("🗑️ Removing image:", image)
+    const publicId = imagePublicId(image)
+
+    // Drop it from the form first — the shop copy is what matters, and a
+    // Cloudinary hiccup shouldn't strand an image the admin has removed.
+    setImages((prev) => prev.filter((_, imageIndex) => imageIndex !== index))
+
+    if (!publicId) return
 
     try {
-      if (image.publicId) {
-        await uploadAPI.delete(image.publicId)
-        console.log("✅ Image deleted from Cloudinary")
-      }
-      setImages((prev) => prev.filter((_, i) => i !== index))
-    } catch (error) {
-      console.error("❌ Delete image error:", error)
-      alert("Failed to delete image")
+      await uploadAPI.delete(publicId)
+    } catch {
+      toast.warning("Image removed from the product", {
+        description: "It couldn't be deleted from storage, so it may still exist there.",
+      })
     }
   }
 
-  const validateForm = () => {
-    const newErrors = {}
+  const moveImageFirst = (index) =>
+    setImages((prev) => {
+      const next = [...prev]
+      const [image] = next.splice(index, 1)
+      return [image, ...next]
+    })
 
-    if (!formData.name.trim()) newErrors.name = "Product name is required"
-    if (!formData.description.trim()) newErrors.description = "Description is required"
-    if (!formData.price || formData.price <= 0) newErrors.price = "Valid price is required"
-    if (formData.category !== "bangles" && (!formData.stock || formData.stock < 0))
-      newErrors.stock = "Valid stock quantity is required"
-    if (images.length === 0) newErrors.images = "At least one image is required"
+  // ---- submit -------------------------------------------------------------
 
-    if (formData.category === "bangles" && formData.sizes.length === 0) {
-      newErrors.sizes = "At least one size is required for bangles"
+  const validate = () => {
+    const next = {}
+
+    if (!form.name.trim()) next.name = "Give the product a name."
+    if (!form.description.trim()) next.description = "Shoppers need a description."
+    if (!form.price || Number(form.price) <= 0) next.price = "Enter a price above zero."
+    if (form.originalPrice && Number(form.originalPrice) <= Number(form.price)) {
+      next.originalPrice = "The original price should be higher than the sale price."
+    }
+    if (images.length === 0) next.images = "Add at least one photo."
+
+    if (sized) {
+      if (form.sizes.length === 0) next.sizes = "Bangles need at least one size."
+    } else if (form.colors.length === 0 && (form.stock === "" || Number(form.stock) < 0)) {
+      next.stock = "Enter the stock quantity."
     }
 
-    if (formData.category === "bangles" && formData.sizes.length > 0) {
-      const sizeValues = formData.sizes.map((s) => s.size)
-      const duplicates = sizeValues.filter((size, index) => sizeValues.indexOf(size) !== index)
-      if (duplicates.length > 0) {
-        newErrors.sizes = "Duplicate sizes are not allowed"
-      }
-    }
-
-    if (formData.colors.length > 0) {
-      const colorNames = formData.colors.map((c) => c.name)
-      const duplicates = colorNames.filter((name, index) => colorNames.indexOf(name) !== index)
-      if (duplicates.length > 0) {
-        newErrors.colors = "Duplicate colors are not allowed"
-      }
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    setErrors(next)
+    return Object.keys(next).length === 0
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
 
-    if (!validateForm()) return
+    if (!validate()) {
+      toast.error("Some fields need attention", { description: "The problems are marked in red below." })
+      // Let the toast render before yanking focus.
+      requestAnimationFrame(() => {
+        document.querySelector('[aria-invalid="true"]')?.focus()
+      })
+      return
+    }
 
-    const productData = {
-      ...formData,
-      price: Number(formData.price),
-      originalPrice: formData.originalPrice ? Number(formData.originalPrice) : undefined,
-      stock: formData.category === "bangles" ? 0 : Number(formData.stock),
-      tags: formData.tags
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
+      price: Number(form.price),
+      originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
+      category: form.category,
+      // Bangles carry their stock per size, colour-tracked products per colour.
+      // The flat field stays at 0 for those so the two never disagree.
+      stock: sized || form.colors.length > 0 ? 0 : Number(form.stock) || 0,
+      tags: form.tags
         .split(",")
         .map((tag) => tag.trim())
-        .filter((tag) => tag),
+        .filter(Boolean),
+      specifications: form.specifications,
       images,
-      sizes: formData.sizes.map((size) => ({
-        size: size.size,
-        measurement: size.measurement,
-        stock: Number(size.stock) || 0,
-        available: Boolean(size.available),
+      sizes: sized
+        ? form.sizes.map((row) => ({
+            size: row.size,
+            measurement: row.measurement,
+            stock: Number(row.stock) || 0,
+            available: Boolean(row.available),
+          }))
+        : [],
+      colors: form.colors.map((row) => ({
+        name: row.name,
+        code: row.code,
+        stock: Number(row.stock) || 0,
+        available: Boolean(row.available),
       })),
-      colors: formData.colors.map((color) => ({
-        name: color.name,
-        hexCode: color.hexCode,
-        stock: Number(color.stock) || 0,
-        available: Boolean(color.available),
-      })),
-      isActive: true,
+      featured: form.featured,
+      isNewArrival: form.isNewArrival,
+      isCombo: form.isCombo,
+      isActive: form.isActive,
     }
 
-    console.log("💾 Saving product data:", productData)
+    setSaving(true)
 
     try {
-      if (id) {
-        await dispatch(updateProduct({ id, productData })).unwrap()
-        alert("Product updated successfully!")
+      if (isEdit) {
+        await productsAPI.update(id, payload)
+        toast.success("Product updated")
       } else {
-        await dispatch(createProduct(productData)).unwrap()
-        alert("Product created successfully!")
+        await productsAPI.create(payload)
+        toast.success("Product created", { description: "It's live in the shop now." })
       }
       navigate("/admin/products")
-    } catch (error) {
-      console.error("❌ Save error:", error)
-      alert("Failed to save product")
+    } catch (err) {
+      toast.error("Could not save the product", { description: err.response?.data?.message || "Please try again." })
+    } finally {
+      setSaving(false)
     }
   }
 
+  const handleCancel = async () => {
+    const ok = await confirm({
+      title: "Discard changes?",
+      message: "Anything you've typed since opening this form is lost.",
+      confirmLabel: "Discard",
+      tone: "danger",
+    })
+    if (ok) navigate("/admin/products")
+  }
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-6">
+        <Skeleton className="h-8 w-56" />
+        {[0, 1, 2].map((section) => (
+          <div key={section} className="space-y-3 rounded-card border border-gray-200 bg-white p-4 sm:p-6">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <ErrorState title="Product unavailable" description={loadError} onRetry={loadProduct} />
+      </div>
+    )
+  }
+
+  const usedSizes = form.sizes.map((row) => row.size)
+  const usedColors = form.colors.map((row) => row.name)
+  const discount =
+    form.originalPrice && Number(form.originalPrice) > Number(form.price)
+      ? Math.round(((form.originalPrice - form.price) / form.originalPrice) * 100)
+      : 0
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 lg:px-8 py-8">
-        <div className="flex items-center mb-8">
-          <button onClick={() => navigate("/admin/products")} className="mr-4 p-2 text-gray-600 hover:text-gray-900">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900">{id ? "Edit Product" : "Add New Product"}</h1>
-        </div>
+    <form onSubmit={handleSubmit} className="mx-auto max-w-5xl">
+      <AdminPageHeader
+        title={isEdit ? "Edit product" : "New product"}
+        description={isEdit ? form.name || "Update the details below." : "Everything marked * is required."}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={handleCancel}
+              leftIcon={<ArrowLeft className="h-4 w-4" />}
+              className="max-sm:hidden"
+            >
+              Back
+            </Button>
+            <Button type="submit" loading={saving} loadingText="Saving…" leftIcon={<Save className="h-4 w-4" />}>
+              {isEdit ? "Save changes" : "Create product"}
+            </Button>
+          </>
+        }
+      />
 
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Basic Information */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Information</h2>
+      <div className="space-y-5">
+        <FormSection title="Basics" description="What the product is called and how it's described." icon={Info}>
+          <div className="grid gap-4">
+            <FormField label="Product name" htmlFor="product-name" required error={errors.name}>
+              {(field) => (
+                <Input
+                  {...field}
+                  value={form.name}
+                  onChange={(event) => setField("name", event.target.value)}
+                  placeholder="Rose gold bangle set"
+                  autoComplete="off"
+                />
+              )}
+            </FormField>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                      errors.name ? "border-red-500" : "border-gray-300"
-                    }`}
-                    placeholder="Enter product name"
+            <FormField
+              label="Description"
+              htmlFor="product-description"
+              required
+              error={errors.description}
+              hint="Shown on the product page. Mention materials, sizing and care."
+            >
+              {(field) => (
+                <Textarea
+                  {...field}
+                  rows={5}
+                  value={form.description}
+                  onChange={(event) => setField("description", event.target.value)}
+                  placeholder="A set of four hand-finished bangles…"
+                />
+              )}
+            </FormField>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Category" htmlFor="product-category" required>
+                {(field) => (
+                  <Select
+                    {...field}
+                    value={form.category}
+                    onChange={(event) => setField("category", event.target.value)}
+                  >
+                    {PRODUCT_CATEGORIES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </FormField>
+
+              <FormField
+                label="Tags"
+                htmlFor="product-tags"
+                hint="Comma separated. Used by search."
+                error={errors.tags}
+              >
+                {(field) => (
+                  <Input
+                    {...field}
+                    value={form.tags}
+                    onChange={(event) => setField("tags", event.target.value)}
+                    placeholder="gift, wedding, gold"
                   />
-                  {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    rows={4}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                      errors.description ? "border-red-500" : "border-gray-300"
-                    }`}
-                    placeholder="Enter product description"
-                  />
-                  {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
-                    <input
-                      type="number"
-                      name="price"
-                      value={formData.price}
-                      onChange={handleInputChange}
-                      min="0"
-                      step="0.01"
-                      className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                        errors.price ? "border-red-500" : "border-gray-300"
-                      }`}
-                      placeholder="0.00"
-                    />
-                    {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Original Price</label>
-                    <input
-                      type="number"
-                      name="originalPrice"
-                      value={formData.originalPrice}
-                      onChange={handleInputChange}
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-                    <select
-                      name="category"
-                      value={formData.category}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                    >
-                      {categories.map((category) => (
-                        <option key={category.value} value={category.value}>
-                          {category.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {formData.category !== "bangles" && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Stock Quantity *</label>
-                      <input
-                        type="number"
-                        name="stock"
-                        value={formData.stock}
-                        onChange={handleInputChange}
-                        min="0"
-                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 ${
-                          errors.stock ? "border-red-500" : "border-gray-300"
-                        }`}
-                        placeholder="0"
-                      />
-                      {errors.stock && <p className="text-red-500 text-sm mt-1">{errors.stock}</p>}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-                  <input
-                    type="text"
-                    name="tags"
-                    value={formData.tags}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                    placeholder="Enter tags separated by commas"
-                  />
-                </div>
-
-                <div className="flex items-center space-x-6">
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      name="featured"
-                      checked={formData.featured}
-                      onChange={handleInputChange}
-                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Featured Product</span>
-                  </label>
-
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      name="isNewArrival"
-                      checked={formData.isNewArrival}
-                      onChange={handleInputChange}
-                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">New Arrival</span>
-                  </label>
-
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      name="isCombo"
-                      checked={formData.isCombo}
-                      onChange={handleInputChange}
-                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Combo Product</span>
-                  </label>
-                </div>
-              </div>
+                )}
+              </FormField>
             </div>
+          </div>
+        </FormSection>
 
-            {/* Right Column */}
-            <div className="space-y-6">
-              {/* Specifications */}
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Specifications</h2>
+        <FormSection title="Pricing" description="Set an original price to show a discount badge." icon={Tag}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Price" htmlFor="product-price" required error={errors.price}>
+              {(field) => (
+                <Input
+                  {...field}
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  value={form.price}
+                  onChange={(event) => setField("price", event.target.value)}
+                  placeholder="0"
+                />
+              )}
+            </FormField>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Material</label>
-                    <input
-                      type="text"
-                      name="specifications.material"
-                      value={formData.specifications.material}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="e.g., Gold plated"
-                    />
-                  </div>
+            <FormField
+              label="Original price"
+              htmlFor="product-original-price"
+              error={errors.originalPrice}
+              hint={discount > 0 ? `Shows as ${discount}% off.` : "Optional — leave blank if it isn't on sale."}
+            >
+              {(field) => (
+                <Input
+                  {...field}
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  value={form.originalPrice}
+                  onChange={(event) => setField("originalPrice", event.target.value)}
+                  placeholder="0"
+                />
+              )}
+            </FormField>
+          </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
-                    <input
-                      type="text"
-                      name="specifications.color"
-                      value={formData.specifications.color}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="e.g., Gold"
-                    />
-                  </div>
+          {form.price > 0 && (
+            <p className="mt-3 text-sm text-gray-600">
+              Shoppers see{" "}
+              <span className="font-semibold text-gray-900">{formatPrice(Number(form.price))}</span>
+              {discount > 0 && (
+                <>
+                  {" "}
+                  with <span className="text-gray-400 line-through">{formatPrice(Number(form.originalPrice))}</span>{" "}
+                  struck through.
+                </>
+              )}
+            </p>
+          )}
+        </FormSection>
 
-                  {formData.category !== "bangles" && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
-                      <input
-                        type="text"
-                        name="specifications.size"
-                        value={formData.specifications.size}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                        placeholder="e.g., Medium"
-                      />
-                    </div>
-                  )}
+        <FormSection
+          title="Photos"
+          description="The first image is the one shown on cards and in search."
+          icon={ImagePlus}
+        >
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {images.map((image, index) => (
+              <div
+                key={imagePublicId(image) || image.url || index}
+                className="group relative aspect-square overflow-hidden rounded-card border border-gray-200 bg-gray-50"
+              >
+                <img
+                  src={image.url || "/placeholder.svg"}
+                  alt={index === 0 ? "Main product photo" : `Product photo ${index + 1}`}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Weight</label>
-                    <input
-                      type="text"
-                      name="specifications.weight"
-                      value={formData.specifications.weight}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="e.g., 50g"
-                    />
-                  </div>
-                </div>
-              </div>
+                {index === 0 && (
+                  <Badge tone="brand-solid" size="xs" className="absolute left-2 top-2">
+                    Main
+                  </Badge>
+                )}
 
-              {/* Size Management for Bangles */}
-              {formData.category === "bangles" && (
-                <div className="bg-white rounded-lg shadow-md p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-gray-900">Available Sizes *</h2>
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  {index > 0 ? (
                     <button
                       type="button"
-                      onClick={addSize}
-                      className="flex items-center px-3 py-1 bg-pink-600 text-white rounded hover:bg-pink-700"
-                      disabled={formData.sizes.length >= 4}
+                      onClick={() => moveImageFirst(index)}
+                      className="rounded-md bg-white/90 px-2 py-1 text-xs font-medium text-gray-800 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add Size
+                      Make main
                     </button>
-                  </div>
-
-                  {errors.sizes && <p className="text-red-500 text-sm mb-3">{errors.sizes}</p>}
-
-                  <div className="space-y-3">
-                    {formData.sizes.map((size, index) => (
-                      <div
-                        key={`size-${index}-${size.size || "new"}`}
-                        className="grid grid-cols-5 gap-3 items-center p-3 border rounded-lg"
-                      >
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Size</label>
-                          <select
-                            value={size.size || ""}
-                            onChange={(e) => handleSizeChange(index, "size", e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-pink-500"
-                          >
-                            <option value="">Select Size</option>
-                            {sizeOptions.map((option) => (
-                              <option key={option.size} value={option.size}>
-                                {option.size}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Measurement</label>
-                          <input
-                            type="text"
-                            value={size.measurement || ""}
-                            onChange={(e) => handleSizeChange(index, "measurement", e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-pink-500"
-                            placeholder="2.4/24"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Stock</label>
-                          <input
-                            type="number"
-                            value={size.stock || 0}
-                            onChange={(e) => handleSizeChange(index, "stock", e.target.value)}
-                            min="0"
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-pink-500"
-                          />
-                        </div>
-
-                        <div className="text-center">
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Available</label>
-                          <input
-                            type="checkbox"
-                            checked={size.available !== false}
-                            onChange={(e) => handleSizeChange(index, "available", e.target.checked)}
-                            className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                          />
-                        </div>
-
-                        <div className="text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeSize(index)}
-                            className="p-1 text-red-600 hover:text-red-800"
-                            title="Remove size"
-                          >
-                            <Minus className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {formData.sizes.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <p>No sizes added yet. Click "Add Size" to add available sizes.</p>
-                    </div>
+                  ) : (
+                    <span />
                   )}
-                </div>
-              )}
-
-              {/* Color Management */}
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Available Colors</h2>
-                  <button
-                    type="button"
-                    onClick={addColor}
-                    className="flex items-center px-3 py-1 bg-pink-600 text-white rounded hover:bg-pink-700"
-                    disabled={formData.colors.length >= predefinedColors.length}
+                  <IconButton
+                    label={`Remove photo ${index + 1}`}
+                    size="xs"
+                    variant="surface"
+                    onClick={() => removeImage(index)}
                   >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Color
-                  </button>
+                    <X />
+                  </IconButton>
                 </div>
+              </div>
+            ))}
 
-                {errors.colors && <p className="text-red-500 text-sm mb-3">{errors.colors}</p>}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              aria-describedby={errors.images ? "product-images-error" : undefined}
+              className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-card border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:border-pink-400 hover:bg-pink-50/50 hover:text-pink-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 aria-hidden="true" className="h-6 w-6 animate-spin" />
+                  <span className="text-xs font-medium">Uploading…</span>
+                </>
+              ) : (
+                <>
+                  <ImagePlus aria-hidden="true" className="h-6 w-6" />
+                  <span className="text-xs font-medium">Add photos</span>
+                </>
+              )}
+            </button>
+          </div>
 
-                <div className="space-y-3">
-                  {formData.colors.map((color, index) => (
-                    <div
-                      key={`color-${index}-${color.name || "new"}`}
-                      className="grid grid-cols-5 gap-3 items-center p-3 border rounded-lg"
-                    >
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Color</label>
-                        <select
-                          value={color.name || ""}
-                          onChange={(e) => handleColorChange(index, "name", e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-pink-500"
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleUpload}
+            className="sr-only"
+            tabIndex={-1}
+          />
+
+          {errors.images && (
+            <p id="product-images-error" role="alert" className="mt-3 text-xs font-medium text-red-600">
+              {errors.images}
+            </p>
+          )}
+        </FormSection>
+
+        {sized ? (
+          <FormSection
+            title="Sizes"
+            description="Bangles are sold per size, and each size carries its own stock."
+            icon={Ruler}
+          >
+            {form.sizes.length > 0 && (
+              <ul className="mb-3 space-y-2.5">
+                {form.sizes.map((row, index) => (
+                  <VariantRow
+                    key={row.size}
+                    removeLabel={`Remove size ${row.size}`}
+                    onRemove={() =>
+                      setField(
+                        "sizes",
+                        form.sizes.filter((_, rowIndex) => rowIndex !== index),
+                      )
+                    }
+                  >
+                    <FormField label="Size" htmlFor={`size-${index}`}>
+                      {(field) => (
+                        <Select
+                          {...field}
+                          size="sm"
+                          value={row.size}
+                          onChange={(event) => {
+                            const option = BANGLE_SIZES.find((entry) => entry.size === event.target.value)
+                            updateSize(index, { size: option.size, measurement: option.measurement })
+                          }}
                         >
-                          <option value="">Select Color</option>
-                          {predefinedColors.map((option) => (
+                          {BANGLE_SIZES.filter((option) => option.size === row.size || !usedSizes.includes(option.size)).map(
+                            (option) => (
+                              <option key={option.size} value={option.size}>
+                                {option.size} — {option.measurement}
+                              </option>
+                            ),
+                          )}
+                        </Select>
+                      )}
+                    </FormField>
+
+                    <FormField label="Stock" htmlFor={`size-stock-${index}`}>
+                      {(field) => (
+                        <Input
+                          {...field}
+                          type="number"
+                          min="0"
+                          size="sm"
+                          inputMode="numeric"
+                          value={row.stock}
+                          onChange={(event) => updateSize(index, { stock: event.target.value })}
+                        />
+                      )}
+                    </FormField>
+
+                    <Checkbox
+                      label="On sale"
+                      checked={row.available}
+                      onChange={(event) => updateSize(index, { available: event.target.checked })}
+                      className="sm:pb-2.5"
+                    />
+                  </VariantRow>
+                ))}
+              </ul>
+            )}
+
+            {errors.sizes && (
+              <p role="alert" className="mb-3 text-xs font-medium text-red-600">
+                {errors.sizes}
+              </p>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addSize}
+              disabled={form.sizes.length >= BANGLE_SIZES.length}
+            >
+              Add size
+            </Button>
+          </FormSection>
+        ) : (
+          <FormSection title="Stock" description="How many units are available to sell." icon={Boxes}>
+            <FormField
+              label="Quantity"
+              htmlFor="product-stock"
+              error={errors.stock}
+              className="sm:max-w-xs"
+              hint={
+                form.colors.length > 0
+                  ? "Tracked per colour below — this field is ignored."
+                  : "Reduced automatically as orders come in."
+              }
+            >
+              {(field) => (
+                <Input
+                  {...field}
+                  type="number"
+                  min="0"
+                  inputMode="numeric"
+                  disabled={form.colors.length > 0}
+                  value={form.colors.length > 0 ? "" : form.stock}
+                  onChange={(event) => setField("stock", event.target.value)}
+                  placeholder="0"
+                />
+              )}
+            </FormField>
+          </FormSection>
+        )}
+
+        <FormSection
+          title="Colours"
+          description="Optional. Adding colours lets shoppers pick one, and tracks stock per colour."
+          icon={Palette}
+        >
+          {form.colors.length > 0 && (
+            <ul className="mb-3 space-y-2.5">
+              {form.colors.map((row, index) => (
+                <VariantRow
+                  key={row.name}
+                  removeLabel={`Remove colour ${row.name}`}
+                  onRemove={() =>
+                    setField(
+                      "colors",
+                      form.colors.filter((_, rowIndex) => rowIndex !== index),
+                    )
+                  }
+                >
+                  <FormField label="Colour" htmlFor={`color-${index}`}>
+                    {(field) => (
+                      <div className="flex items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="h-8 w-8 shrink-0 rounded-lg border border-gray-300"
+                          style={{ backgroundColor: swatch(row) }}
+                        />
+                        <Select
+                          {...field}
+                          size="sm"
+                          value={row.name}
+                          onChange={(event) => {
+                            const option = PRODUCT_COLORS.find((entry) => entry.name === event.target.value)
+                            updateColor(index, { name: option.name, code: option.code })
+                          }}
+                        >
+                          {PRODUCT_COLORS.filter(
+                            (option) => option.name === row.name || !usedColors.includes(option.name),
+                          ).map((option) => (
                             <option key={option.name} value={option.name}>
                               {option.name}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       </div>
+                    )}
+                  </FormField>
 
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Preview</label>
-                        <div
-                          className="w-8 h-8 rounded border border-gray-300"
-                          style={{ backgroundColor: color.hexCode || "#000000" }}
-                          title={color.hexCode || "#000000"}
-                        />
-                      </div>
+                  <FormField label="Stock" htmlFor={`color-stock-${index}`}>
+                    {(field) => (
+                      <Input
+                        {...field}
+                        type="number"
+                        min="0"
+                        size="sm"
+                        inputMode="numeric"
+                        value={row.stock}
+                        onChange={(event) => updateColor(index, { stock: event.target.value })}
+                      />
+                    )}
+                  </FormField>
 
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Stock</label>
-                        <input
-                          type="number"
-                          value={color.stock || 0}
-                          onChange={(e) => handleColorChange(index, "stock", e.target.value)}
-                          min="0"
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-pink-500"
-                        />
-                      </div>
+                  <Checkbox
+                    label="On sale"
+                    checked={row.available}
+                    onChange={(event) => updateColor(index, { available: event.target.checked })}
+                    className="sm:pb-2.5"
+                  />
+                </VariantRow>
+              ))}
+            </ul>
+          )}
 
-                      <div className="text-center">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Available</label>
-                        <input
-                          type="checkbox"
-                          checked={color.available !== false}
-                          onChange={(e) => handleColorChange(index, "available", e.target.checked)}
-                          className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                        />
-                      </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addColor}
+            disabled={form.colors.length >= PRODUCT_COLORS.length}
+          >
+            Add colour
+          </Button>
+        </FormSection>
 
-                      <div className="text-center">
-                        <button
-                          type="button"
-                          onClick={() => removeColor(index)}
-                          className="p-1 text-red-600 hover:text-red-800"
-                          title="Remove color"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+        <FormSection title="Specifications" description="Shown as a table on the product page." icon={Info}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Material" htmlFor="spec-material">
+              {(field) => (
+                <Input
+                  {...field}
+                  value={form.specifications.material}
+                  onChange={(event) => setSpec("material", event.target.value)}
+                  placeholder="Gold plated brass"
+                />
+              )}
+            </FormField>
 
-                {formData.colors.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No colors added yet. Click "Add Color" to add available colors.</p>
-                  </div>
-                )}
-              </div>
+            <FormField label="Colour" htmlFor="spec-color">
+              {(field) => (
+                <Input
+                  {...field}
+                  value={form.specifications.color}
+                  onChange={(event) => setSpec("color", event.target.value)}
+                  placeholder="Rose gold"
+                />
+              )}
+            </FormField>
 
-              {/* Images */}
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Product Images *</h2>
+            <FormField label="Dimensions" htmlFor="spec-dimensions">
+              {(field) => (
+                <Input
+                  {...field}
+                  value={form.specifications.dimensions}
+                  onChange={(event) => setSpec("dimensions", event.target.value)}
+                  placeholder="6 cm diameter"
+                />
+              )}
+            </FormField>
 
-                <div className="space-y-4">
-                  <div>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      id="image-upload"
-                      disabled={uploading}
-                    />
-                    <label
-                      htmlFor="image-upload"
-                      className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 ${
-                        uploading ? "border-gray-300 cursor-not-allowed" : "border-gray-300 hover:border-pink-500"
-                      }`}
-                    >
-                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-600">{uploading ? "Uploading..." : "Click to upload images"}</p>
-                    </label>
-                    {errors.images && <p className="text-red-500 text-sm mt-1">{errors.images}</p>}
-                  </div>
+            <FormField label="Weight" htmlFor="spec-weight">
+              {(field) => (
+                <Input
+                  {...field}
+                  value={form.specifications.weight}
+                  onChange={(event) => setSpec("weight", event.target.value)}
+                  placeholder="45 g"
+                />
+              )}
+            </FormField>
+          </div>
+        </FormSection>
 
-                  {images.length > 0 && (
-                    <div className="grid grid-cols-2 gap-4">
-                      {images.map((image, index) => (
-                        <div key={index} className="relative">
-                          <img
-                            src={image.url || "/placeholder.svg"}
-                            alt={`Product ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg"
-                            onError={(e) => {
-                              console.error("Image load error:", e.target.src)
-                              e.target.src = "/placeholder.svg"
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeImage(index)}
-                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+        <FormSection title="Placement" description="Where this product appears around the shop." icon={Sparkles}>
+          <div className="space-y-3">
+            {PRODUCT_FLAGS.map((flag) => (
+              <Checkbox
+                key={flag.key}
+                label={flag.label}
+                hint={flag.hint}
+                checked={form[flag.key]}
+                onChange={(event) => setField(flag.key, event.target.checked)}
+              />
+            ))}
+
+            <div className="border-t border-gray-100 pt-3">
+              <Checkbox
+                label="Visible in the shop"
+                hint="Uncheck to retire it. Retired products stay in your order history but can't be bought."
+                checked={form.isActive}
+                onChange={(event) => setField("isActive", event.target.checked)}
+              />
             </div>
           </div>
-
-          {/* Submit Button */}
-          <div className="mt-8 flex justify-end">
-            <button
-              type="submit"
-              disabled={loading || uploading}
-              className="flex items-center px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save className="h-5 w-5 mr-2" />
-              {loading ? "Saving..." : id ? "Update Product" : "Create Product"}
-            </button>
-          </div>
-        </form>
+        </FormSection>
       </div>
-    </div>
+
+      <div className="sticky bottom-0 -mx-4 mt-6 flex items-center justify-end gap-2.5 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <Button type="button" variant="outline" onClick={handleCancel} disabled={saving}>
+          Cancel
+        </Button>
+        <Button type="submit" loading={saving} loadingText="Saving…" leftIcon={<Save className="h-4 w-4" />}>
+          {isEdit ? "Save changes" : "Create product"}
+        </Button>
+      </div>
+    </form>
   )
 }
 

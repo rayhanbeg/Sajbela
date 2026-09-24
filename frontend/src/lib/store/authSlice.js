@@ -20,6 +20,22 @@ export const registerUser = createAsyncThunk("auth/registerUser", async (userDat
   }
 })
 
+/**
+ * Sign in (or sign up) with a Google ID token.
+ *
+ * Returns the same `{ token, user }` shape as email login, so the reducer
+ * treats it identically — Google accounts get the app's normal JWT session,
+ * not a parallel auth path.
+ */
+export const googleLogin = createAsyncThunk("auth/googleLogin", async (credential, { rejectWithValue }) => {
+  try {
+    const response = await authAPI.googleLogin(credential)
+    return response.data
+  } catch (error) {
+    return rejectWithValue(error.response?.data?.message || "Google sign-in failed")
+  }
+})
+
 export const fetchUserProfile = createAsyncThunk("auth/fetchUserProfile", async (_, { rejectWithValue }) => {
   try {
     const response = await authAPI.getProfile()
@@ -139,12 +155,32 @@ const authSlice = createSlice({
         state.loading = false
         state.error = action.payload
       })
+      // Google — same success shape as login, so same reducer body.
+      .addCase(googleLogin.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(googleLogin.fulfilled, (state, action) => {
+        state.loading = false
+        state.isAuthenticated = true
+        state.user = action.payload.user
+        state.token = action.payload.token
+        localStorage.setItem("token", action.payload.token)
+        localStorage.setItem("user", JSON.stringify(action.payload.user))
+      })
+      .addCase(googleLogin.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.payload
+      })
       // Fetch Profile
       .addCase(fetchUserProfile.pending, (state) => {
         state.loading = true
       })
       .addCase(fetchUserProfile.fulfilled, (state, action) => {
         state.loading = false
+        // A deleted account answers 200 with `null`; don't blank out the
+        // session on that, or the header renders a signed-in shell with no name.
+        if (!action.payload) return
         state.user = action.payload
         localStorage.setItem("user", JSON.stringify(action.payload))
       })
@@ -158,8 +194,13 @@ const authSlice = createSlice({
       })
       .addCase(updateUserProfile.fulfilled, (state, action) => {
         state.loading = false
-        state.user = action.payload.user
-        localStorage.setItem("user", JSON.stringify(action.payload.user))
+        // Merge rather than replace. The update endpoint echoes back a subset
+        // of the document, so assigning it wholesale used to drop `_id`,
+        // `createdAt` and `avatar` from the session — which is why the admin
+        // user list stopped recognising your own row after you edited your
+        // profile.
+        state.user = { ...state.user, ...action.payload.user }
+        localStorage.setItem("user", JSON.stringify(state.user))
       })
       .addCase(updateUserProfile.rejected, (state, action) => {
         state.loading = false
