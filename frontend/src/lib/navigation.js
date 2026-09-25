@@ -78,16 +78,16 @@ export const PRIMARY_NAV = [
 
 /** Secondary nav — footer + mobile off-canvas menu. */
 export const SECONDARY_NAV = [
-  { label: "About Us", to: "/about" },
+  { label: "About", to: "/about" },
   { label: "Contact", to: "/contact" },
-  { label: "Shipping Info", to: "/shipping" },
+  { label: "Delivery", to: "/shipping" },
   { label: "Returns", to: "/returns" },
   { label: "FAQ", to: "/faq" },
 ]
 
 export const LEGAL_NAV = [
-  { label: "Privacy Policy", to: "/privacy" },
-  { label: "Terms of Service", to: "/terms" },
+  { label: "Privacy", to: "/privacy" },
+  { label: "Terms", to: "/terms" },
 ]
 
 /** Store contact details, referenced by the header bar, footer and contact page. */

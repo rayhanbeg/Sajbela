@@ -178,7 +178,7 @@ const ProductFilters = ({ filters, onChange, onClear, lockedKeys = [], showClear
           </div>
 
           <Button type="submit" variant="secondary" size="sm" fullWidth disabled={!customPriceDirty}>
-            Apply price range
+            Apply
           </Button>
         </form>
       </Group>

@@ -36,7 +36,7 @@ const ResetPasswordPage = () => {
 
   useEffect(() => {
     if (!token) {
-      setInvalidReason("This page needs a reset link. Request one and we'll email it to you.")
+      setInvalidReason("This page needs a reset link.")
       return
     }
 
@@ -52,8 +52,7 @@ const ResetPasswordPage = () => {
       .catch((error) => {
         if (cancelled) return
         setInvalidReason(
-          error.response?.data?.message ||
-            "This reset link has expired or has already been used. Reset links are valid for 30 minutes and work once.",
+          error.response?.data?.message || "This link has expired or has already been used.",
         )
         setStage("invalid")
       })
@@ -112,7 +111,7 @@ const ResetPasswordPage = () => {
   /* ── Verifying ────────────────────────────────────────────── */
   if (stage === "verifying") {
     return (
-      <AuthLayout title="Checking your link" description="One moment while we verify this reset link.">
+      <AuthLayout title="Checking your link">
         <div className="space-y-4" aria-busy="true">
           <Skeleton className="h-4 w-1/3" rounded="rounded" />
           <Skeleton className="h-12 w-full" />
@@ -170,10 +169,7 @@ const ResetPasswordPage = () => {
             <CheckCircle2 className="h-7 w-7" />
           </div>
 
-          <p className="text-sm leading-relaxed text-gray-600">
-            The reset link has been used up, and we&rsquo;ve emailed you a confirmation. If that wasn&rsquo;t you,
-            contact us straight away.
-          </p>
+          <p className="text-sm text-gray-600">We&rsquo;ve emailed you a confirmation.</p>
 
           <Button size="lg" fullWidth className="mt-6" onClick={() => navigate("/auth/login", { replace: true })}>
             Go to sign in
@@ -187,7 +183,7 @@ const ResetPasswordPage = () => {
   return (
     <AuthLayout
       title="Set a new password"
-      description={email ? `Choose a new password for ${email}.` : "Choose a new password for your account."}
+      description={email || undefined}
       footer={
         <Link
           to="/auth/login"
@@ -232,9 +228,9 @@ const ResetPasswordPage = () => {
           Update password
         </Button>
 
-        <p className="flex items-start gap-2 text-xs leading-relaxed text-gray-500">
-          <ShieldCheck aria-hidden="true" className="mt-px h-4 w-4 shrink-0 text-gray-400" />
-          For your security this link stops working the moment your password is updated.
+        <p className="flex items-center gap-2 text-xs text-gray-500">
+          <ShieldCheck aria-hidden="true" className="h-4 w-4 shrink-0 text-gray-400" />
+          This link stops working once your password is updated.
         </p>
       </form>
     </AuthLayout>

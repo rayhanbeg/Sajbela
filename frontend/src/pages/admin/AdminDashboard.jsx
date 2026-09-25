@@ -201,7 +201,7 @@ const AdminDashboard = () => {
         <Panel
           className="xl:col-span-3"
           title="Recent orders"
-          description="The five most recent, newest first."
+          description="The five most recent."
           bodyClassName="p-0 sm:p-0"
           actions={
             <Link to="/admin/orders" className="text-sm font-medium text-pink-600 hover:text-pink-700 hover:underline">
@@ -220,7 +220,7 @@ const AdminDashboard = () => {
               <EmptyState
                 icon={<ShoppingBag />}
                 title="No orders yet"
-                description="Orders will appear here as soon as the first one is placed."
+                description="Orders will appear here."
                 size="sm"
               />
             }
@@ -250,7 +250,7 @@ const AdminDashboard = () => {
               <EmptyState
                 icon={<Package />}
                 title="Nothing running low"
-                description={`Every active product has more than ${LOW_STOCK_THRESHOLD} units in stock.`}
+                description={`Everything is above ${LOW_STOCK_THRESHOLD} units.`}
                 size="sm"
               />
             </div>

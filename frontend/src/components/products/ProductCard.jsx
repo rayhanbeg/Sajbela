@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link, useLocation, useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useDispatch } from "react-redux"
 import { ShoppingBag, SlidersHorizontal } from "lucide-react"
 
@@ -44,7 +44,6 @@ function isAvailable(product) {
 const ProductCard = ({ product, priority = false, sizes, className }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const location = useLocation()
   const toast = useToast()
   const { openCart } = useStorefrontUI()
 
@@ -73,18 +72,13 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
 
     setPending(true)
     try {
-      await dispatch(addToCartAsync({ productId: product._id, quantity: 1 })).unwrap()
+      // `product` rides along so a guest line can snapshot it without a second
+      // fetch — the grid already has the whole document.
+      await dispatch(addToCartAsync({ productId: product._id, quantity: 1, product })).unwrap()
       toast.success(`${product.name} added to your cart`)
       openCart()
     } catch (error) {
       const message = typeof error === "string" ? error : error?.message || "Could not add to cart"
-
-      // Guests are bounced to login for now; Phase 5 gives them a local cart.
-      if (/login/i.test(message)) {
-        navigate(`/auth/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`)
-        return
-      }
-
       toast.error(message)
       // Re-sync in case the failure was a stale local quantity.
       dispatch(fetchCart())

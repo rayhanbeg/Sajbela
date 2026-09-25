@@ -105,7 +105,6 @@ const MobileMenu = ({ open, onClose }) => {
         ) : (
           <>
             <p className="text-sm font-semibold text-gray-900">Welcome to {STORE.name}</p>
-            <p className="mt-0.5 text-xs text-gray-600">Sign in to track orders and save addresses.</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Button size="sm" onClick={() => go("/auth/login")}>
                 Sign in
@@ -170,7 +169,7 @@ const MobileMenu = ({ open, onClose }) => {
         </div>
       </div>
 
-      <button type="button" onClick={() => go("/products?sort=newest")} className={linkClass}>
+      <button type="button" onClick={() => go("/products?section=new-arrivals")} className={linkClass}>
         <Sparkles aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
         New Arrivals
       </button>
@@ -198,7 +197,7 @@ const MobileMenu = ({ open, onClose }) => {
 
       <div className="mt-4 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-xs text-gray-600">
         <ShieldCheck aria-hidden="true" className="h-4 w-4 shrink-0 text-green-600" />
-        Cash on delivery available nationwide
+        Cash on delivery nationwide
       </div>
     </Drawer>
   )

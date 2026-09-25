@@ -40,14 +40,13 @@ import {
  *  - `alert()` × 6 became toasts, and a successful add opens the cart drawer
  *  - the gallery gained thumbnails, keyboard nav, hover zoom and a lightbox
  *  - a sticky buy bar appears on mobile once the inline buttons scroll away
- *
- * What deliberately did NOT change: the login gate. Adding to cart still needs
- * an account, and the selections are stashed in localStorage and replayed on
- * return. Guest cart is Phase 5 of the brief — doing it here would mean two
- * different cart implementations live at once.
+ *  - adding to cart no longer requires an account. It used to stash the chosen
+ *    size/colour under `pendingProductSelection`, redirect to /auth/register,
+ *    and replay the add on return — a signup wall in front of the cart, with a
+ *    replay path that silently dropped the selection if the shopper signed in
+ *    from a different page. Guests get a real cart now (lib/guestCart), which
+ *    merges onto the account if they ever make one.
  */
-
-const PENDING_KEY = "pendingProductSelection"
 
 /**
  * Mirrors the stock resolution in backend/controllers/cartController.addToCart
@@ -69,7 +68,6 @@ const ProductDetailPage = () => {
   const { openCart } = useStorefrontUI()
 
   const { currentProduct: product, loading, error } = useSelector((state) => state.products)
-  const { isAuthenticated } = useSelector((state) => state.auth)
 
   const [quantity, setQuantity] = useState(1)
   const [selectedSize, setSelectedSize] = useState(null)
@@ -114,20 +112,6 @@ const ProductDetailPage = () => {
   const addToCart = async (mode) => {
     if (!product) return
 
-    if (!isAuthenticated) {
-      // Stash the choices so they can be replayed after signing in.
-      try {
-        localStorage.setItem(
-          PENDING_KEY,
-          JSON.stringify({ productId: product._id, selectedSize, selectedColor, quantity, action: mode }),
-        )
-      } catch {
-        /* private mode / quota — the user just re-picks after logging in */
-      }
-      navigate(`/auth/register?returnTo=${encodeURIComponent(`/products/${product._id}`)}`)
-      return
-    }
-
     if (requiresSize && !selectedSize) {
       toast.error("Please choose a size first")
       return
@@ -145,6 +129,8 @@ const ProductDetailPage = () => {
           quantity,
           selectedSize: selectedSize?.size,
           selectedColor: selectedColor?.name,
+          // Saves the guest branch a round trip: this page already has it.
+          product,
         }),
       ).unwrap()
 
@@ -160,54 +146,6 @@ const ProductDetailPage = () => {
       setPending(null)
     }
   }
-
-  /*
-   * Replays the stashed selection after a login/registration round trip.
-   * `addToCart` is intentionally not a dependency — it closes over the current
-   * selections, and re-running this effect on every selection change would
-   * re-add the item.
-   */
-  useEffect(() => {
-    if (!isAuthenticated || !product) return
-
-    const raw = localStorage.getItem(PENDING_KEY)
-    if (!raw) return
-    localStorage.removeItem(PENDING_KEY)
-
-    let stashed
-    try {
-      stashed = JSON.parse(raw)
-    } catch {
-      return
-    }
-    if (stashed?.productId !== product._id) return
-
-    setSelectedSize(stashed.selectedSize || null)
-    setSelectedColor(stashed.selectedColor || null)
-    setQuantity(stashed.quantity || 1)
-
-    dispatch(
-      addToCartAsync({
-        productId: product._id,
-        quantity: stashed.quantity || 1,
-        selectedSize: stashed.selectedSize?.size,
-        selectedColor: stashed.selectedColor?.name,
-      }),
-    )
-      .unwrap()
-      .then(() => {
-        if (stashed.action === "buyNow" || stashed.action === "buy") {
-          navigate("/checkout")
-        } else {
-          toast.success("Picked up where you left off — item added to your cart")
-          openCart()
-        }
-      })
-      .catch((failure) => {
-        toast.error(typeof failure === "string" ? failure : "Couldn't restore your selection")
-      })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, product?._id])
 
   /* ── Loading / error / missing ─────────────────────────── */
 
@@ -231,7 +169,7 @@ const ProductDetailPage = () => {
         <EmptyState
           icon={<PackageX />}
           title="Product not found"
-          description="This product may have been removed, or the link is out of date."
+          description="This link may be out of date."
           action={<Button to="/products">Browse all products</Button>}
         />
       </div>
@@ -243,18 +181,15 @@ const ProductDetailPage = () => {
   const discount = getDiscount(product.price, product.originalPrice)
   const label = categoryLabel(product.category)
 
-  const actionLabel =
-    !isAuthenticated
-      ? "Sign in to add"
-      : missingChoice
-        ? requiresSize && !selectedSize
-          ? "Select a size"
-          : "Select a colour"
-        : !inStock
-          ? "Out of stock"
-          : "Add to cart"
+  const actionLabel = missingChoice
+    ? requiresSize && !selectedSize
+      ? "Select a size"
+      : "Select a colour"
+    : !inStock
+      ? "Out of stock"
+      : "Add to cart"
 
-  const actionDisabled = isAuthenticated && (missingChoice || !inStock)
+  const actionDisabled = missingChoice || !inStock
 
   const actions = (
     <>
@@ -378,7 +313,7 @@ const ProductDetailPage = () => {
               )}
             </div>
 
-            <p className="mt-4 line-clamp-3 text-sm leading-relaxed text-gray-600">{product.description}</p>
+            <p className="mt-4 line-clamp-2 text-sm leading-relaxed text-gray-600">{product.description}</p>
 
             {/* ── Variants ───────────────────────────────────── */}
             {(requiresColor || requiresSize) && (
@@ -414,12 +349,6 @@ const ProductDetailPage = () => {
               {actions}
             </div>
 
-            {!isAuthenticated && (
-              <p className="mt-2.5 text-xs text-gray-500">
-                We'll bring you straight back here with your choices saved.
-              </p>
-            )}
-
             {/* ── Combo contents ─────────────────────────────── */}
             {product.isCombo && product.comboItems?.length > 0 && (
               <div className="mt-6 rounded-card bg-pink-50 p-4 ring-1 ring-inset ring-pink-100">
@@ -437,25 +366,22 @@ const ProductDetailPage = () => {
                 </ul>
                 {product.comboDiscount > 0 && (
                   <p className="mt-2.5 text-sm font-semibold text-pink-700">
-                    Save {product.comboDiscount}% versus buying separately.
+                    Save {product.comboDiscount}% vs buying separately.
                   </p>
                 )}
               </div>
             )}
 
             {/* ── Reassurance ────────────────────────────────── */}
-            <ul className="mt-6 grid gap-3 border-t border-gray-200 pt-6 sm:grid-cols-3">
+            <ul className="mt-6 grid gap-2.5 border-t border-gray-200 pt-6 sm:grid-cols-3">
               {[
-                { icon: Truck, title: "Free delivery", text: `On orders over ${formatPrice(SHIPPING.freeThreshold)}` },
-                { icon: Wallet, title: "Cash on delivery", text: "Pay when it arrives" },
-                { icon: BadgeCheck, title: "Quality checked", text: "Inspected before dispatch" },
-              ].map(({ icon: Icon, title, text }) => (
-                <li key={title} className="flex gap-2.5">
-                  <Icon aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-pink-600" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{title}</p>
-                    <p className="text-xs leading-relaxed text-gray-600">{text}</p>
-                  </div>
+                { icon: Truck, text: `Free delivery over ${formatPrice(SHIPPING.freeThreshold)}` },
+                { icon: Wallet, text: "Cash on delivery" },
+                { icon: BadgeCheck, text: "Quality checked" },
+              ].map(({ icon: Icon, text }) => (
+                <li key={text} className="flex items-center gap-2">
+                  <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-pink-600" />
+                  <span className="text-xs font-medium text-gray-700">{text}</span>
                 </li>
               ))}
             </ul>
@@ -530,7 +456,7 @@ const ProductDetailPage = () => {
 
 const StockLine = ({ missingChoice, inStock, maxStock }) => {
   if (missingChoice) {
-    return <p className="text-sm text-gray-600">Choose an option to see availability.</p>
+    return <p className="text-sm text-gray-600">Choose an option to see stock.</p>
   }
 
   if (!inStock) {
@@ -566,7 +492,7 @@ const Specifications = ({ product }) => {
   if (product.category) rows.unshift(["Category", categoryLabel(product.category)])
 
   if (rows.length === 0) {
-    return <p className="text-sm text-gray-500">No specifications have been listed for this product.</p>
+    return <p className="text-sm text-gray-500">No specifications listed.</p>
   }
 
   return (
@@ -585,24 +511,24 @@ const ShippingInfo = () => (
   <div className="grid max-w-3xl gap-6 sm:grid-cols-2">
     <div>
       <h3 className="text-sm font-semibold text-gray-900">Delivery</h3>
-      <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-gray-600">
-        <li>Inside Dhaka — {formatPrice(SHIPPING.insideDhaka)}, 1–2 business days.</li>
-        <li>Outside Dhaka — {formatPrice(SHIPPING.outsideDhaka)}, 2–4 business days.</li>
-        <li>Free delivery on orders over {formatPrice(SHIPPING.freeThreshold)}.</li>
-        <li>Cash on delivery available nationwide.</li>
+      <ul className="mt-2 space-y-1.5 text-sm text-gray-600">
+        <li>Inside Dhaka — {formatPrice(SHIPPING.insideDhaka)}, 1–2 days.</li>
+        <li>Outside Dhaka — {formatPrice(SHIPPING.outsideDhaka)}, 2–4 days.</li>
+        <li>Free over {formatPrice(SHIPPING.freeThreshold)}.</li>
+        <li>Cash on delivery nationwide.</li>
       </ul>
     </div>
 
     <div>
       <h3 className="text-sm font-semibold text-gray-900">Returns</h3>
-      <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-gray-600">
-        <li>Check your parcel in front of the delivery rider.</li>
-        <li>Damaged or wrong items are replaced free of charge.</li>
-        <li>Report an issue within 3 days of delivery.</li>
-        <li>Cosmetics can only be returned unopened.</li>
+      <ul className="mt-2 space-y-1.5 text-sm text-gray-600">
+        <li>Check your parcel with the rider.</li>
+        <li>Damaged or wrong items replaced free.</li>
+        <li>Report an issue within 3 days.</li>
+        <li>Cosmetics returnable unopened only.</li>
       </ul>
       <Button to="/returns" variant="ghost-brand" size="sm" className="mt-3 -ml-3">
-        Full returns policy
+        Full policy
       </Button>
     </div>
   </div>

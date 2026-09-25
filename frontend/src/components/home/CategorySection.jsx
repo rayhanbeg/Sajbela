@@ -33,7 +33,6 @@ const CategorySection = () => {
         <SectionHeader
           eyebrow="Browse"
           title="Shop by category"
-          description="Seven collections, curated by hand."
           actionLabel="View all products"
           actionTo="/products"
         />

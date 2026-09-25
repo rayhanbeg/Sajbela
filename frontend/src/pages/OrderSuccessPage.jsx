@@ -20,9 +20,9 @@ import { formatPrice } from "../lib/utils"
  */
 
 const STEPS = [
-  { icon: CheckCircle2, title: "Order received", body: "We've got it. A confirmation email is on its way." },
-  { icon: Package, title: "Packing", body: "We check and pack each piece by hand." },
-  { icon: Truck, title: "On the way", body: "Delivery takes 2–3 working days." },
+  { icon: CheckCircle2, title: "Order received", body: "Confirmation email on its way." },
+  { icon: Package, title: "Packing", body: "Each piece checked by hand." },
+  { icon: Truck, title: "On the way", body: "2–3 working days." },
 ]
 
 const OrderSuccessPage = () => {
@@ -31,6 +31,9 @@ const OrderSuccessPage = () => {
 
   const { orderId, orderData } = location.state || {}
   const hasOrder = Boolean(orderId || orderData)
+  // Guest orders have no account to track from, so the copy and the CTA below
+  // point at the confirmation email and the lookup page instead.
+  const isGuest = hasOrder && !orderData?.user
 
   // Landing here directly (a bookmark, a refresh that dropped router state)
   // means there's nothing to show — send them home rather than leave them on a
@@ -47,7 +50,7 @@ const OrderSuccessPage = () => {
         <EmptyState
           icon={<Package />}
           title="Nothing to show here"
-          description="If you've just placed an order, you'll find it under your account. Taking you home…"
+          description="Taking you home…"
           action={
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <Button to="/products" size="lg">
@@ -80,9 +83,7 @@ const OrderSuccessPage = () => {
           </span>
 
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">Thank you — order placed</h1>
-          <p className="mx-auto mt-2 max-w-md text-gray-600">
-            We'll confirm it by phone before dispatch. You can track it any time from your account.
-          </p>
+          <p className="mx-auto mt-2 max-w-md text-gray-600">We'll call to confirm before dispatch.</p>
 
           <p className="mt-5 inline-flex items-baseline gap-2 rounded-full bg-white px-4 py-2 text-sm shadow-sm ring-1 ring-gray-200">
             <span className="text-gray-600">Order</span>
@@ -176,9 +177,15 @@ const OrderSuccessPage = () => {
         </section>
 
         <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
-          <Button to="/account" size="lg" fullWidth>
-            Track my order
-          </Button>
+          {isGuest ? (
+            <Button to="/auth/register" size="lg" fullWidth>
+              Create an account
+            </Button>
+          ) : (
+            <Button to="/account" size="lg" fullWidth>
+              Track my order
+            </Button>
+          )}
           <Button to="/products" variant="outline" size="lg" fullWidth>
             Continue shopping
           </Button>
@@ -186,7 +193,7 @@ const OrderSuccessPage = () => {
 
         <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-sm text-gray-500">
           <Clock aria-hidden="true" className="h-4 w-4" />
-          Need to change something?{" "}
+          Need a change?{" "}
           <Link to="/contact" className="font-medium text-pink-600 underline-offset-2 hover:underline">
             Contact us
           </Link>

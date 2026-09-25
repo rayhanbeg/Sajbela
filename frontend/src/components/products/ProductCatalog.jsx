@@ -213,8 +213,8 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
                 title="No products match these filters"
                 description={
                   chips.length > 0
-                    ? "Try removing a filter or widening the price range."
-                    : "There's nothing here yet — check back soon."
+                    ? "Try removing a filter."
+                    : "Nothing here yet — check back soon."
                 }
                 action={
                   chips.length > 0 ? (

@@ -11,9 +11,9 @@ import { Button, Drawer, EmptyState, IconButton, Image, QuantityStepper, Spinner
 /**
  * Slide-in cart.
  *
- * Reads entirely from the `cart` redux slice, so it works unchanged once the
- * guest (localStorage) cart lands in Phase 5 — only the slice's internals
- * change, not this component.
+ * Reads entirely from the `cart` redux slice, so it works for guests and
+ * signed-in shoppers alike — the slice resolves against localStorage or the
+ * API, and this component never branches on auth.
  */
 const CartDrawer = ({ open, onClose }) => {
   const dispatch = useDispatch()
@@ -55,8 +55,8 @@ const CartDrawer = ({ open, onClose }) => {
       open={open}
       onClose={onClose}
       side="right"
-      title="Your Cart"
-      description={totalItems > 0 ? `${totalItems} ${totalItems === 1 ? "item" : "items"}` : "No items yet"}
+      title="Your cart"
+      description={totalItems > 0 ? `${totalItems} ${totalItems === 1 ? "item" : "items"}` : undefined}
       bodyClassName="flex flex-col"
       footer={
         isEmpty ? null : (
@@ -65,7 +65,7 @@ const CartDrawer = ({ open, onClose }) => {
               <span className="text-sm text-gray-600">Subtotal</span>
               <span className="text-lg font-bold text-gray-900">{formatPrice(subtotal)}</span>
             </div>
-            <p className="text-xs text-gray-500">Delivery charges are calculated at checkout.</p>
+            <p className="text-xs text-gray-500">Delivery calculated at checkout.</p>
 
             <Button fullWidth size="lg" onClick={() => goTo("/checkout")}>
               Checkout
@@ -81,7 +81,7 @@ const CartDrawer = ({ open, onClose }) => {
         <EmptyState
           icon={<ShoppingBag />}
           title="Your cart is empty"
-          description="Browse our collections and add something you love."
+          description="Nothing here yet."
           action={<Button onClick={() => goTo("/products")}>Start shopping</Button>}
           className="flex-1"
         />

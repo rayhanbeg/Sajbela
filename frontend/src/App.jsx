@@ -3,9 +3,12 @@ import { Route, Routes, useLocation } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
 
 import StorefrontLayout from "./components/layout/StorefrontLayout"
+import { AdminLayout } from "./components/admin"
 import ProtectedRoute from "./components/ProtectedRoute"
 import { ConfirmProvider, Spinner, ToastProvider } from "./components/ui"
 import { fetchUserProfile } from "./lib/store/authSlice"
+import { fetchCart, mergeGuestCart } from "./lib/store/cartSlice"
+import { hasGuestCart } from "./lib/guestCart"
 
 // Storefront pages — eagerly loaded; these are the hot path.
 import HomePage from "./pages/HomePage"
@@ -56,8 +59,6 @@ const RouteFallback = () => (
   </div>
 )
 
-const adminRoute = (element) => <ProtectedRoute adminOnly>{element}</ProtectedRoute>
-
 function App() {
   const dispatch = useDispatch()
   const { token } = useSelector((state) => state.auth)
@@ -72,6 +73,20 @@ function App() {
     if (token) {
       dispatch(fetchUserProfile())
     }
+  }, [dispatch, token])
+
+  /*
+   * Load the cart, from whichever side owns it.
+   *
+   * Signed in with items still sitting in the guest store means the shopper
+   * built a cart and then logged in, so the lines are replayed onto the account
+   * first; `mergeGuestCart` refetches the server cart when it's done. This used
+   * to live in Header and only ran when authenticated, which is why a guest's
+   * badge stayed at zero across a reload.
+   */
+  useEffect(() => {
+    if (token && hasGuestCart()) dispatch(mergeGuestCart())
+    else dispatch(fetchCart())
   }, [dispatch, token])
 
   return (
@@ -119,15 +134,27 @@ function App() {
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/terms" element={<TermsPage />} />
 
-              {/* Admin — moves to its own shell in the admin redesign phase. */}
-              <Route path="/admin" element={adminRoute(<AdminDashboard />)} />
-              <Route path="/admin/products" element={adminRoute(<AdminProducts />)} />
-              <Route path="/admin/products/new" element={adminRoute(<AdminProductForm />)} />
-              <Route path="/admin/products/:id/edit" element={adminRoute(<AdminProductForm />)} />
-              <Route path="/admin/orders" element={adminRoute(<AdminOrders />)} />
-              <Route path="/admin/users" element={adminRoute(<AdminUsers />)} />
-
               <Route path="*" element={<NotFoundPage />} />
+            </Route>
+
+            {/*
+              Admin lives outside the storefront shell: its own sidebar layout,
+              and one guard on the parent instead of the same check repeated on
+              five pages.
+            */}
+            <Route
+              element={
+                <ProtectedRoute adminOnly>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/products" element={<AdminProducts />} />
+              <Route path="/admin/products/new" element={<AdminProductForm />} />
+              <Route path="/admin/products/:id/edit" element={<AdminProductForm />} />
+              <Route path="/admin/orders" element={<AdminOrders />} />
+              <Route path="/admin/users" element={<AdminUsers />} />
             </Route>
           </Routes>
         </Suspense>

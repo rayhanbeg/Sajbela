@@ -32,7 +32,7 @@ const SECTIONS = [
     title: "Returns and cancellations",
     body: [
       "You can cancel an order yourself while it is still pending or processing — once it has shipped, please call us instead.",
-      "If an item arrives damaged or is not what you ordered, contact us within 48 hours of delivery and we'll arrange a replacement or refund.",
+      "If an item arrives damaged or is not what you ordered, contact us within 3 days of delivery and we'll arrange a replacement or refund.",
       "For hygiene reasons, opened cosmetics cannot be returned unless faulty.",
     ],
   },

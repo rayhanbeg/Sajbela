@@ -107,8 +107,7 @@ const SearchOverlay = ({ open, onClose }) => {
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search bangles, earrings, cosmetics…"
               aria-label="Search products"
-              /* text-base (16px) prevents iOS Safari zooming in on focus. */
-              className={cn(
+              /* text-base (16px) prevents iOS Safari zooming in on focus. */              className={cn(
                 "h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-10 text-base text-gray-900",
                 "placeholder:text-gray-400 transition-colors",
                 "focus:border-pink-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-pink-200",
@@ -150,7 +149,7 @@ const SearchOverlay = ({ open, onClose }) => {
           {recent.length > 0 && (
             <section className="mb-6">
               <div className="mb-2.5 flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Recent searches</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Recent</h3>
                 <button
                   type="button"
                   onClick={clearRecent}
@@ -178,7 +177,7 @@ const SearchOverlay = ({ open, onClose }) => {
           )}
 
           <section>
-            <h3 className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-gray-500">Browse categories</h3>
+            <h3 className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-gray-500">Categories</h3>
 
             <ul className="flex flex-wrap gap-2">
               {CATEGORIES.map((category) => (

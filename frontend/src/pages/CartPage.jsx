@@ -37,8 +37,9 @@ import {
  *
  * It also had guest branches that dispatched `updateQuantity`/`removeFromCart`
  * — which are aliases for the authenticated thunks, so they threw "Please login
- * to update cart" and did nothing. Those branches are gone; the real guest cart
- * is Phase 5 and will land in the redux slice, not here.
+ * to update cart" and did nothing. The cart slice handles both sides now
+ * (lib/guestCart backs the signed-out one), so this page doesn't branch on auth
+ * for anything except the saved-address preview.
  */
 
 const CartPage = () => {
@@ -55,8 +56,9 @@ const CartPage = () => {
   // Per-row busy flag, so updating one line doesn't grey out the whole list.
   const [busyId, setBusyId] = useState(null)
 
+  // Re-read on mount — prices and stock may have moved since the cart was
+  // filled. Resolves against localStorage for guests, the API for everyone else.
   useEffect(() => {
-    if (!isAuthenticated) return
     dispatch(fetchCart())
   }, [dispatch, isAuthenticated])
 
@@ -117,7 +119,7 @@ const CartPage = () => {
   const handleClear = async () => {
     const ok = await confirm({
       title: "Empty your cart?",
-      message: `This removes all ${count} ${count === 1 ? "item" : "items"}. You can always add them again.`,
+      message: `This removes all ${count} ${count === 1 ? "item" : "items"}.`,
       confirmLabel: "Empty cart",
       tone: "danger",
       onConfirm: () => dispatch(clearCartAsync()).unwrap(),
@@ -127,7 +129,7 @@ const CartPage = () => {
   }
 
   /* ── Loading ──────────────────────────────────────────────── */
-  if (isAuthenticated && !initialized && loading) {
+  if (!initialized && loading) {
     return <CartSkeleton />
   }
 
@@ -137,25 +139,13 @@ const CartPage = () => {
       <div className="bg-gray-50">
         <PageHeader count={0} />
         <div className="page-container pb-16 pt-4">
-          {isAuthenticated ? (
-            <EmptyState
-              icon={<ShoppingBag />}
-              title="Your cart is empty"
-              description="Nothing here yet. Browse the collections and add something you love."
-              action={<Button to="/products" size="lg">Start shopping</Button>}
-              secondaryAction={<Button to="/" variant="ghost">Back to home</Button>}
-              className="rounded-card border border-gray-100 bg-white shadow-card"
-            />
-          ) : (
-            <EmptyState
-              icon={<ShoppingBag />}
-              title="Sign in to see your cart"
-              description="Your cart is saved to your account, so it's waiting for you on any device."
-              action={<Button to="/auth/login" size="lg">Sign in</Button>}
-              secondaryAction={<Button to="/products" variant="ghost">Continue shopping</Button>}
-              className="rounded-card border border-gray-100 bg-white shadow-card"
-            />
-          )}
+          <EmptyState
+            icon={<ShoppingBag />}
+            title="Your cart is empty"
+            description="Nothing here yet."
+            action={<Button to="/products" size="lg">Start shopping</Button>}
+            className="rounded-card border border-gray-100 bg-white shadow-card"
+          />
         </div>
       </div>
     )
@@ -303,13 +293,11 @@ const CartPage = () => {
                 </dl>
 
                 {totals.estimated && (
-                  <p className="text-xs leading-relaxed text-gray-500">
-                    Delivery is estimated at the outside-Dhaka rate. Add your address at checkout for the exact charge.
-                  </p>
+                  <p className="text-xs text-gray-500">Estimated rate — exact charge at checkout.</p>
                 )}
 
                 <Button fullWidth size="lg" onClick={() => navigate("/checkout")}>
-                  Proceed to checkout
+                  Checkout
                   <ArrowRight aria-hidden="true" className="h-4 w-4" />
                 </Button>
 

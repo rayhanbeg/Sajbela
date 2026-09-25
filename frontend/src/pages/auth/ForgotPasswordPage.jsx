@@ -85,12 +85,12 @@ const ForgotPasswordPage = () => {
 
     const address = email.trim()
     if (!address) {
-      setFieldError("Enter the email address on your account")
+      setFieldError("Enter your email")
       document.getElementById("forgot-email")?.focus()
       return
     }
     if (!validateEmail(address)) {
-      setFieldError("That doesn't look like an email address")
+      setFieldError("Enter a valid email")
       document.getElementById("forgot-email")?.focus()
       return
     }
@@ -104,7 +104,7 @@ const ForgotPasswordPage = () => {
     return (
       <AuthLayout
         title="Check your email"
-        description={`If an account exists for ${maskEmail(email.trim())}, a reset link is on its way.`}
+        description={`If ${maskEmail(email.trim())} has an account, a reset link is on its way.`}
         footer={
           <Link
             to="/auth/login"
@@ -122,33 +122,11 @@ const ForgotPasswordPage = () => {
             <MailCheck className="h-7 w-7" />
           </div>
 
-          <ol className="mx-auto max-w-xs space-y-2.5 text-left text-sm text-gray-600">
-            <li className="flex gap-2.5">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[0.6875rem] font-semibold text-gray-600">
-                1
-              </span>
-              Open the email from Sajbela.
-            </li>
-            <li className="flex gap-2.5">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[0.6875rem] font-semibold text-gray-600">
-                2
-              </span>
-              Tap <span className="font-medium text-gray-900">Reset password</span> — the link works once and expires
-              in 30 minutes.
-            </li>
-            <li className="flex gap-2.5">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[0.6875rem] font-semibold text-gray-600">
-                3
-              </span>
-              Choose a new password and sign in.
-            </li>
-          </ol>
+          <p className="text-sm text-gray-600">The link works once and expires in 30 minutes.</p>
 
-          <p className="mt-6 text-xs leading-relaxed text-gray-500">
-            Nothing yet? Check your spam or promotions folder — it can take a minute to arrive.
-          </p>
+          <p className="mt-2 text-xs text-gray-500">Check your spam folder if it hasn&rsquo;t arrived.</p>
 
-          <div className="mt-5 space-y-2.5">
+          <div className="mt-6 space-y-2.5">
             <AuthError>{submitError}</AuthError>
 
             <Button
@@ -184,7 +162,7 @@ const ForgotPasswordPage = () => {
   return (
     <AuthLayout
       title="Forgot your password?"
-      description="Enter the email on your account and we'll send you a link to set a new one."
+      description="We'll email you a link to set a new one."
       footer={
         <>
           Remembered it?{" "}

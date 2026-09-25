@@ -49,8 +49,17 @@ export const SORT_OPTIONS = [
 
 export const DEFAULT_SORT = "newest"
 
+/**
+ * Curated slices of the catalogue, linked to from the home-page rails.
+ * The backend maps these onto `isNewArrival` / `isCombo`.
+ */
+export const SECTIONS = [
+  { value: "new-arrivals", label: "New arrivals" },
+  { value: "combo", label: "Combos" },
+]
+
 /** Filter keys only — `sort` and `page` are handled separately. */
-export const FILTER_KEYS = ["category", "color", "price", "search", "minPrice", "maxPrice"]
+export const FILTER_KEYS = ["category", "color", "price", "search", "minPrice", "maxPrice", "section"]
 
 /** URLSearchParams -> a plain filter object with "" for absent values. */
 export function readFilters(searchParams) {
@@ -116,6 +125,11 @@ export function describeActiveFilters(filters, lockedKeys = []) {
   const push = (key, label, patch) => {
     if (lockedKeys.includes(key)) return
     chips.push({ key, label, patch })
+  }
+
+  if (filters.section) {
+    const section = SECTIONS.find((s) => s.value === filters.section)
+    push("section", section?.label || filters.section, { section: "" })
   }
 
   if (filters.category) {

@@ -13,7 +13,6 @@ const FeaturedProducts = () => (
     endpoint="/products/featured/list"
     eyebrow="Loved by customers"
     title="Best sellers"
-    description="The pieces our customers keep coming back for."
     actionLabel="Shop all products"
     actionTo="/products"
     layout="grid"

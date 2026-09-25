@@ -61,12 +61,38 @@ const shippingAddressSchema = new mongoose.Schema({
   },
 })
 
+/**
+ * Who the order is for when there's no account behind it.
+ *
+ * Checkout already collects a name, phone and address — it never read them from
+ * the profile — so the only thing an account was really providing here was an
+ * email address to send the confirmation to. That's captured here instead, and
+ * `user` is now optional.
+ */
+const guestInfoSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, trim: true, lowercase: true },
+    phone: { type: String, required: true, trim: true },
+  },
+  { _id: false },
+)
+
 const orderSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      // Guest orders have no account. `default: null` rather than leaving the
+      // path unset, so `{ user: null }` queries find them.
+      required: false,
+      default: null,
+      index: true,
+    },
+    guestInfo: {
+      type: guestInfoSchema,
+      required: false,
+      default: undefined,
     },
     orderItems: [orderItemSchema],
     shippingAddress: shippingAddressSchema,
@@ -128,5 +154,17 @@ const orderSchema = new mongoose.Schema(
     timestamps: true,
   },
 )
+
+/**
+ * One of the two has to be there. Without this an empty body would save an
+ * order nobody could be contacted about — `user` alone used to be `required`,
+ * which is what made that impossible before guest checkout existed.
+ */
+orderSchema.pre("validate", function (next) {
+  if (!this.user && !this.guestInfo) {
+    this.invalidate("user", "An order needs either a user or guest contact details")
+  }
+  next()
+})
 
 export default mongoose.model("Order", orderSchema)

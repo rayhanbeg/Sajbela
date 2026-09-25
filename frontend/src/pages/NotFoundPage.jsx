@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, Home, Search, ShoppingBag } from "lucide-react"
+import { ArrowLeft, Home, Search } from "lucide-react"
 import { Button } from "../components/ui"
 import { CATEGORIES, categoryPath } from "../lib/navigation"
 
@@ -18,8 +18,8 @@ const NotFoundPage = () => {
 
       <h1 className="-mt-4 text-display-sm font-bold text-gray-900 md:-mt-6">Page not found</h1>
 
-      <p className="mt-3 max-w-md text-sm leading-relaxed text-gray-600 md:text-base">
-        The page you&rsquo;re looking for doesn&rsquo;t exist or has moved. Let&rsquo;s get you back to shopping.
+      <p className="mt-3 max-w-md text-sm text-gray-600 md:text-base">
+        This page doesn&rsquo;t exist or has moved.
       </p>
 
       <div className="mt-7 flex flex-col-reverse gap-2.5 sm:flex-row">
@@ -28,9 +28,6 @@ const NotFoundPage = () => {
         </Button>
         <Button to="/" leftIcon={<Home className="h-4 w-4" />}>
           Back to home
-        </Button>
-        <Button to="/products" variant="secondary" leftIcon={<ShoppingBag className="h-4 w-4" />}>
-          Shop all
         </Button>
       </div>
 

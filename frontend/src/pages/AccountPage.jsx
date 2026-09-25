@@ -85,7 +85,7 @@ const AccountPage = () => {
         <EmptyState
           icon={<User />}
           title="Sign in to see your account"
-          description="Your orders, addresses and reviews live here once you're signed in."
+          description="Orders, addresses and reviews live here."
           action={
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <Button to="/auth/login" size="lg">

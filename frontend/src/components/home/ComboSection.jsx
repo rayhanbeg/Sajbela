@@ -9,7 +9,6 @@ const ComboSection = () => (
     endpoint="/products/combos/list"
     eyebrow="Better together"
     title="Special combos"
-    description="Matched sets that cost less than buying each piece on its own."
     actionLabel="View all combos"
     actionTo="/category/combo"
     layout="rail"

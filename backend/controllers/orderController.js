@@ -1,3 +1,4 @@
+import mongoose from "mongoose"
 import Order from "../models/Order.js"
 import Product from "../models/Product.js"
 import Cart from "../models/Cart.js"
@@ -44,6 +45,7 @@ export const getAllOrders = async (req, res) => {
       query.$or = [
         { "shippingAddress.fullName": { $regex: term, $options: "i" } },
         { "shippingAddress.phone": { $regex: term, $options: "i" } },
+        { "guestInfo.email": { $regex: term, $options: "i" } },
       ]
     }
 
@@ -132,26 +134,33 @@ export const getOrderStats = async (req, res) => {
   }
 }
 
-// Create new order
+/**
+ * Place an order — with or without an account.
+ *
+ * Mounted on `optionalAuth`, so `req.user` may be undefined. Everything the
+ * order needs about the buyer other than their email was already coming from
+ * the checkout form rather than the profile, so the guest path is genuinely
+ * just "no account to attach and no server cart to empty".
+ */
 export const createOrder = async (req, res) => {
   try {
-    const { orderItems, shippingAddress, paymentMethod, itemsPrice, taxPrice, shippingPrice, totalPrice } = req.body
+    const { orderItems, shippingAddress, paymentMethod, itemsPrice, taxPrice, shippingPrice, totalPrice, guestInfo } =
+      req.body
 
     if (!orderItems || orderItems.length === 0) {
       return res.status(400).json({ message: "No order items" })
     }
 
-    console.log("Order items received:", orderItems)
-    console.log("User ID:", req.user._id)
+    if (!shippingAddress?.fullName || !shippingAddress?.address || !shippingAddress?.phone) {
+      return res.status(400).json({ message: "Shipping name, address and phone are required" })
+    }
 
-    // Log each item's color and size for debugging
-    orderItems.forEach((item, index) => {
-      console.log(`Item ${index}:`, {
-        name: item.name,
-        selectedColor: item.selectedColor,
-        selectedSize: item.selectedSize,
-      })
-    })
+    // Guests must leave an email — it's the only way to send the confirmation
+    // and the only handle they have on the order afterwards.
+    const guest = !req.user
+    if (guest && !guestInfo?.email) {
+      return res.status(400).json({ message: "An email address is required to place an order as a guest" })
+    }
 
     // Verify products exist and have sufficient stock
     for (const item of orderItems) {
@@ -193,25 +202,23 @@ export const createOrder = async (req, res) => {
 
     // Create the order with proper address structure
     const order = new Order({
-      user: req.user._id,
-      orderItems: orderItems.map((item) => {
-        console.log("Creating order item:", {
-          product: item.product,
-          name: item.name,
-          selectedSize: item.selectedSize,
-          selectedColor: item.selectedColor,
-        })
-
-        return {
-          product: item.product,
-          name: item.name,
-          image: item.image,
-          price: item.price,
-          quantity: item.quantity,
-          selectedSize: item.selectedSize || null,
-          selectedColor: item.selectedColor || null,
-        }
-      }),
+      user: req.user?._id || null,
+      guestInfo: guest
+        ? {
+            name: guestInfo.name || shippingAddress.fullName,
+            email: guestInfo.email,
+            phone: guestInfo.phone || shippingAddress.phone,
+          }
+        : undefined,
+      orderItems: orderItems.map((item) => ({
+        product: item.product,
+        name: item.name,
+        image: item.image,
+        price: item.price,
+        quantity: item.quantity,
+        selectedSize: item.selectedSize || null,
+        selectedColor: item.selectedColor || null,
+      })),
       shippingAddress: {
         fullName: shippingAddress.fullName,
         address: shippingAddress.address,
@@ -228,7 +235,6 @@ export const createOrder = async (req, res) => {
     })
 
     const createdOrder = await order.save()
-    console.log("Order created with items:", createdOrder.orderItems)
 
     // Update product stock after successful order creation
     for (const item of orderItems) {
@@ -256,15 +262,19 @@ export const createOrder = async (req, res) => {
       await product.save()
     }
 
-    // Clear user's cart after successful order
-    await Cart.findOneAndUpdate({ user: req.user._id }, { items: [] })
+    // Only account holders have a server-side cart to empty; a guest's lives in
+    // their browser and is cleared by the checkout page.
+    if (!guest) {
+      await Cart.findOneAndUpdate({ user: req.user._id }, { items: [] })
+    }
 
-    // Send beautiful order confirmation email
+    // Confirmation email — to the account, or to the address the guest gave us.
     try {
-      const emailResult = await sendOrderConfirmation(req.user.email, req.user.name, createdOrder)
-      if (emailResult.success) {
-        console.log("Order confirmation email sent successfully")
-      } else {
+      const recipient = guest ? createdOrder.guestInfo.email : req.user.email
+      const recipientName = guest ? createdOrder.guestInfo.name : req.user.name
+
+      const emailResult = await sendOrderConfirmation(recipient, recipientName, createdOrder)
+      if (!emailResult.success) {
         console.error("Failed to send order confirmation email:", emailResult.error)
       }
     } catch (emailError) {
@@ -272,7 +282,6 @@ export const createOrder = async (req, res) => {
       // Don't fail the order creation if email fails
     }
 
-    console.log("Order created successfully:", createdOrder._id)
     res.status(201).json(createdOrder)
   } catch (error) {
     console.error("Create order error:", error)
@@ -300,8 +309,10 @@ export const getOrder = async (req, res) => {
       return res.status(404).json({ message: "Order not found" })
     }
 
-    // Check if user owns the order or is admin
-    if (order.user._id.toString() !== req.user._id.toString() && req.user.role !== "admin") {
+    // `order.user` is null on a guest order, so this can't dereference it
+    // unconditionally the way it used to — that threw a 500 instead of a 403.
+    const isOwner = order.user && order.user._id.toString() === req.user._id.toString()
+    if (!isOwner && req.user.role !== "admin") {
       return res.status(403).json({ message: "Access denied" })
     }
 
@@ -309,6 +320,47 @@ export const getOrder = async (req, res) => {
   } catch (error) {
     console.error("Get order error:", error)
     res.status(500).json({ message: "Server error fetching order" })
+  }
+}
+
+/**
+ * Guest order lookup.
+ *
+ * A guest has no session to prove the order is theirs, so the phone number on
+ * the shipping address stands in as the shared secret — they have the order id
+ * from the confirmation page and email, and knowing both is good enough for an
+ * order that's already been placed. Deliberately not exposed for account orders:
+ * those go through `GET /:id` behind `auth`.
+ */
+export const lookupGuestOrder = async (req, res) => {
+  try {
+    const { orderId, phone } = req.body
+
+    if (!orderId || !phone) {
+      return res.status(400).json({ message: "Order number and phone number are required" })
+    }
+
+    if (!mongoose.isValidObjectId(orderId)) {
+      return res.status(404).json({ message: "No order found with those details" })
+    }
+
+    const order = await Order.findOne({ _id: orderId, user: null })
+
+    // Compare on digits only — people type +880, leading zeros and spaces
+    // inconsistently, and a mismatch here reads as "your order doesn't exist".
+    const digits = (value) => String(value || "").replace(/\D/g, "")
+    const given = digits(phone)
+
+    if (!order || !given || !digits(order.shippingAddress?.phone).endsWith(given.slice(-9))) {
+      // Same response either way, so this can't be used to test whether an
+      // order id exists.
+      return res.status(404).json({ message: "No order found with those details" })
+    }
+
+    res.json(order)
+  } catch (error) {
+    console.error("Guest order lookup error:", error)
+    res.status(500).json({ message: "Server error looking up order" })
   }
 }
 
@@ -349,8 +401,10 @@ export const cancelOrder = async (req, res) => {
       return res.status(404).json({ message: "Order not found" })
     }
 
-    // Check if user owns the order
-    if (order.user.toString() !== req.user._id.toString()) {
+    // Check if user owns the order. Guest orders (`user: null`) can only be
+    // cancelled by an admin — there's no session to prove ownership.
+    const isOwner = order.user && order.user.toString() === req.user._id.toString()
+    if (!isOwner && req.user.role !== "admin") {
       return res.status(403).json({ message: "Access denied" })
     }
 

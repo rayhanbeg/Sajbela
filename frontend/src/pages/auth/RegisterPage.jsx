@@ -29,13 +29,13 @@ function validate(form, agreed) {
   const errors = {}
 
   if (!form.name.trim()) errors.name = "Enter your name"
-  else if (form.name.trim().length < 2) errors.name = "That name looks too short"
+  else if (form.name.trim().length < 2) errors.name = "Name is too short"
 
-  if (!form.email.trim()) errors.email = "Enter your email address"
-  else if (!validateEmail(form.email.trim())) errors.email = "That doesn't look like an email address"
+  if (!form.email.trim()) errors.email = "Enter your email"
+  else if (!validateEmail(form.email.trim())) errors.email = "Enter a valid email"
 
   if (!form.phone.trim()) errors.phone = "Enter your phone number"
-  else if (!validatePhone(form.phone)) errors.phone = "Enter an 11-digit number starting with 01"
+  else if (!validatePhone(form.phone)) errors.phone = "11 digits, starting 01"
 
   if (!form.password) errors.password = "Choose a password"
   else if (form.password.length < 6) errors.password = "Use at least 6 characters"
@@ -43,7 +43,7 @@ function validate(form, agreed) {
   if (!form.confirmPassword) errors.confirmPassword = "Re-enter your password"
   else if (form.password !== form.confirmPassword) errors.confirmPassword = "Passwords don't match"
 
-  if (!agreed) errors.terms = "Please accept the terms to continue"
+  if (!agreed) errors.terms = "Accept the terms to continue"
 
   return errors
 }
@@ -112,8 +112,7 @@ const RegisterPage = () => {
   return (
     <AuthLayout
       title="Create your account"
-      description="One account for orders, saved addresses and faster checkout."
-      notice={returnTo ? <AuthNotice>Create an account to finish your purchase.</AuthNotice> : null}
+      notice={returnTo ? <AuthNotice>Create an account to continue.</AuthNotice> : null}
       footer={
         <>
           Already have an account?{" "}
@@ -161,7 +160,7 @@ const RegisterPage = () => {
           label="Phone number"
           htmlFor="register-phone"
           error={errors.phone}
-          hint="We only use this for delivery updates."
+          hint="For delivery updates"
           required
         >
           {(field) => (

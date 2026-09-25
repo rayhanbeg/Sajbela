@@ -9,7 +9,6 @@ const NewArrivals = () => (
     endpoint="/products/new-arrivals/list"
     eyebrow="Just in"
     title="New arrivals"
-    description="The latest pieces to land in the studio."
     actionLabel="View all new arrivals"
     actionTo="/products?section=new-arrivals"
     layout="rail"

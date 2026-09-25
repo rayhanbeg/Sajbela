@@ -1,281 +1,137 @@
 import { useState } from "react"
-import { MapPin, Phone, Mail, Clock } from "lucide-react"
+import { Clock, MapPin, MessageCircle, Phone, Send } from "lucide-react"
+
+import PageHero from "../components/PageHero"
+import { STORE } from "../lib/navigation"
+import { Button, FormField, Select, Textarea } from "../components/ui"
+
+/**
+ * Contact.
+ *
+ * The old form faked a submit with setTimeout and told people "we'll get back
+ * to you soon" — nothing was ever sent, and there is no contact endpoint on the
+ * backend. It now composes a WhatsApp message instead, which actually reaches
+ * the store and needs no server.
+ */
+
+const SUBJECTS = ["Order support", "Product question", "Delivery", "Return or exchange", "Something else"]
+
+const CHANNELS = [
+  { icon: Phone, label: "Phone", value: STORE.phone, href: STORE.phoneHref },
+  { icon: MessageCircle, label: "WhatsApp", value: STORE.phone, href: `https://wa.me/${STORE.whatsapp}` },
+  { icon: Clock, label: "Hours", value: STORE.hours },
+  { icon: MapPin, label: "Based in", value: STORE.location },
+]
 
 const ContactPage = () => {
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    subject: "",
-    message: "",
-  })
-  const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [subject, setSubject] = useState(SUBJECTS[0])
+  const [message, setMessage] = useState("")
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-
-    // Simulate form submission
-    setTimeout(() => {
-      setSuccess(true)
-      setLoading(false)
-      setFormData({
-        name: "",
-        email: "",
-        phone: "",
-        subject: "",
-        message: "",
-      })
-    }, 1000)
-  }
-
-  const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
+  const send = (event) => {
+    event.preventDefault()
+    const text = `${subject}: ${message.trim()}`
+    window.open(`https://wa.me/${STORE.whatsapp}?text=${encodeURIComponent(text)}`, "_blank", "noopener")
   }
 
   return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="bg-gradient-to-r from-pink-50 to-purple-50 py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center">
-            <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">Contact Us</h1>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Have questions or need assistance? We're here to help! Reach out to us anytime.
-            </p>
-          </div>
-        </div>
-      </section>
+    <>
+      <PageHero
+        icon={<MessageCircle />}
+        title="Contact"
+        description={`We answer ${STORE.hours}.`}
+        breadcrumbs={[{ label: "Contact" }]}
+      />
 
-      {/* Contact Info & Form Section */}
-      <section className="py-16">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {/* Contact Information */}
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-8">Get in Touch</h2>
+      <div className="page-container py-10 md:py-14">
+        <div className="mx-auto grid max-w-4xl gap-8 lg:grid-cols-[1fr_1.1fr]">
+          {/* Channels */}
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Reach us</h2>
 
-              <div className="space-y-6">
-                <div className="flex items-start">
-                  <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
-                    <MapPin className="h-6 w-6 text-pink-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-1">Address</h3>
-                    <p className="text-gray-600">
-                      123 Fashion Street
-                      <br />
-                      Dhanmondi, Dhaka 1205
-                      <br />
-                      Bangladesh
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start">
-                  <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
-                    <Phone className="h-6 w-6 text-pink-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-1">Phone</h3>
-                    <p className="text-gray-600">
-                      +880-1234-567890
-                      <br />
-                      +880-9876-543210
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start">
-                  <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
-                    <Mail className="h-6 w-6 text-pink-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-1">Email</h3>
-                    <p className="text-gray-600">
-                      info@sajbela.com
-                      <br />
-                      support@sajbela.com
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start">
-                  <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
-                    <Clock className="h-6 w-6 text-pink-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-1">Business Hours</h3>
-                    <p className="text-gray-600">
-                      Monday - Friday: 9:00 AM - 8:00 PM
-                      <br />
-                      Saturday: 10:00 AM - 6:00 PM
-                      <br />
-                      Sunday: Closed
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Social Media */}
-              <div className="mt-8">
-                <h3 className="font-semibold text-gray-900 mb-4">Follow Us</h3>
-                <div className="flex space-x-4">
-                  <a
-                    href="#"
-                    className="w-10 h-10 bg-pink-600 text-white rounded-lg flex items-center justify-center hover:bg-pink-700 transition-colors"
-                  >
-                    f
-                  </a>
-                  <a
-                    href="#"
-                    className="w-10 h-10 bg-pink-600 text-white rounded-lg flex items-center justify-center hover:bg-pink-700 transition-colors"
-                  >
-                    ig
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            {/* Contact Form */}
-            <div>
-              <div className="bg-white rounded-lg shadow-md p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Send us a Message</h2>
-
-                {success && (
-                  <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-green-800">Thank you for your message! We'll get back to you soon.</p>
-                  </div>
-                )}
-
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                      <input
-                        type="text"
-                        name="name"
-                        required
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                        placeholder="Your full name"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                        placeholder="Your phone number"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                    <input
-                      type="email"
-                      name="email"
-                      required
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="Your email address"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
-                    <select
-                      name="subject"
-                      required
-                      value={formData.subject}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
+            <ul className="mt-3 space-y-2.5">
+              {CHANNELS.map(({ icon: Icon, label, value, href }) => {
+                const body = (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-pink-100 text-pink-600"
                     >
-                      <option value="">Select a subject</option>
-                      <option value="general">General Inquiry</option>
-                      <option value="order">Order Support</option>
-                      <option value="product">Product Question</option>
-                      <option value="shipping">Shipping & Delivery</option>
-                      <option value="return">Returns & Exchanges</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs text-gray-500">{label}</span>
+                      <span className="block truncate text-sm font-semibold text-gray-900">{value}</span>
+                    </span>
+                  </>
+                )
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Message *</label>
-                    <textarea
-                      name="message"
-                      required
-                      rows={5}
-                      value={formData.message}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                      placeholder="Tell us how we can help you..."
-                    />
-                  </div>
+                return (
+                  <li key={label}>
+                    {href ? (
+                      <a
+                        href={href}
+                        target={href.startsWith("http") ? "_blank" : undefined}
+                        rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
+                        className="flex items-center gap-3 rounded-card border border-gray-200 bg-white p-4 shadow-card transition-colors duration-200 hover:border-pink-300 hover:bg-pink-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500"
+                      >
+                        {body}
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-3 rounded-card border border-gray-200 bg-white p-4 shadow-card">
+                        {body}
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
 
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-pink-600 text-white py-3 px-4 rounded-lg hover:bg-pink-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? "Sending..." : "Send Message"}
-                  </button>
-                </form>
-              </div>
-            </div>
-          </div>
+            <Button to="/faq" variant="ghost" className="mt-3">
+              Read the FAQ first
+            </Button>
+          </section>
+
+          {/* Message */}
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Send a message</h2>
+
+            <form
+              onSubmit={send}
+              className="mt-3 space-y-4 rounded-card border border-gray-200 bg-white p-5 shadow-card"
+            >
+              <FormField label="Topic" htmlFor="contact-subject">
+                {(field) => (
+                  <Select {...field} value={subject} onChange={(event) => setSubject(event.target.value)}>
+                    {SUBJECTS.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </FormField>
+
+              <FormField label="Message" htmlFor="contact-message" hint="Opens in WhatsApp" required>
+                {(field) => (
+                  <Textarea
+                    {...field}
+                    required
+                    rows={5}
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    placeholder="Include your order number if you have one."
+                  />
+                )}
+              </FormField>
+
+              <Button type="submit" fullWidth size="lg" disabled={!message.trim()} leftIcon={<Send className="h-4 w-4" />}>
+                Send on WhatsApp
+              </Button>
+            </form>
+          </section>
         </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h2>
-            <p className="text-gray-600">Quick answers to common questions</p>
-          </div>
-
-          <div className="max-w-3xl mx-auto space-y-6">
-            {[
-              {
-                question: "What are your delivery charges?",
-                answer: "We offer free delivery on orders above ৳1000. For orders below ৳1000, delivery charge is ৳50.",
-              },
-              {
-                question: "Do you accept Cash on Delivery?",
-                answer: "Yes, we accept Cash on Delivery (COD) for all orders across Bangladesh.",
-              },
-              {
-                question: "How long does delivery take?",
-                answer: "Delivery typically takes 2-3 business days within Dhaka and 3-5 business days outside Dhaka.",
-              },
-              {
-                question: "Can I return or exchange products?",
-                answer:
-                  "Yes, we accept returns and exchanges within 7 days of delivery. Products must be in original condition.",
-              },
-            ].map((faq, index) => (
-              <div key={index} className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="font-semibold text-gray-900 mb-2">{faq.question}</h3>
-                <p className="text-gray-600">{faq.answer}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
+      </div>
+    </>
   )
 }
 

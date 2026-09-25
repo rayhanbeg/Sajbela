@@ -3,8 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
 import { ChevronDown, LayoutDashboard, LogOut, Menu, Package, Phone, Search, ShoppingBag, Truck, User } from "lucide-react"
 import { cn } from "../../lib/cn"
-import { logout, fetchUserProfile } from "../../lib/store/authSlice"
-import { fetchCartItems } from "../../lib/store/cartSlice"
+import { logout } from "../../lib/store/authSlice"
 import { useClickOutside } from "../../lib/hooks"
 import { CATEGORIES, PRIMARY_NAV, SHIPPING, STORE, categoryPath } from "../../lib/navigation"
 import { formatPrice } from "../../lib/utils"
@@ -37,17 +36,6 @@ const Header = ({ onSearchClick, onCartClick, onMenuClick }) => {
   const closeTimer = useRef(null)
 
   const isAdmin = isAuthenticated && user?.role === "admin"
-
-  // Refresh the profile once on mount when authenticated, so a role change
-  // made in the admin panel is picked up. (The old 30s poll is gone — it fired
-  // a request every half minute on every page for no real benefit.)
-  useEffect(() => {
-    if (isAuthenticated) dispatch(fetchUserProfile())
-  }, [isAuthenticated, dispatch])
-
-  useEffect(() => {
-    if (isAuthenticated) dispatch(fetchCartItems())
-  }, [isAuthenticated, dispatch])
 
   // Close menus on navigation.
   useEffect(() => {

@@ -7,7 +7,6 @@ import MobileMenu from "./MobileMenu"
 import SearchOverlay from "./SearchOverlay"
 import CartDrawer from "../cart/CartDrawer"
 import WhatsAppButton from "../WhatsAppButton"
-import { cn } from "../../lib/cn"
 import { StorefrontUIContext, useStorefrontUI } from "../../lib/storefrontUI"
 
 /**
@@ -49,11 +48,6 @@ const StorefrontLayout = () => {
   const handleCartClick = useCallback(() => setCartOpen(true), [])
   const handleMenuClick = useCallback(() => setMenuOpen(true), [])
 
-  // Admin pages share this shell for now but shouldn't get shopper chrome —
-  // the bottom nav and the WhatsApp bubble are storefront-only affordances.
-  // (The admin redesign moves these routes out to their own layout.)
-  const isAdminRoute = location.pathname.startsWith("/admin")
-
   return (
     <StorefrontUIContext.Provider value={api}>
       <div className="flex min-h-screen flex-col bg-white">
@@ -63,18 +57,14 @@ const StorefrontLayout = () => {
           `pb-bottom-nav` clears the fixed mobile bottom nav (4rem + iOS safe
           area). Removed from md up where the bottom nav is hidden.
         */}
-        <main id="main-content" className={cn("flex-1", !isAdminRoute && "pb-bottom-nav md:pb-0")}>
+        <main id="main-content" className="flex-1 pb-bottom-nav md:pb-0">
           <Outlet />
         </main>
 
         <Footer />
 
-        {!isAdminRoute && (
-          <>
-            <BottomNav onSearchClick={handleSearchClick} onCartClick={handleCartClick} />
-            <WhatsAppButton />
-          </>
-        )}
+        <BottomNav onSearchClick={handleSearchClick} onCartClick={handleCartClick} />
+        <WhatsAppButton />
 
         <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
         <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />

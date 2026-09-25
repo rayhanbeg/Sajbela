@@ -58,8 +58,8 @@ const LoginPage = () => {
     event.preventDefault()
 
     const found = {}
-    if (!form.email.trim()) found.email = "Enter your email address"
-    else if (!validateEmail(form.email.trim())) found.email = "That doesn't look like an email address"
+    if (!form.email.trim()) found.email = "Enter your email"
+    else if (!validateEmail(form.email.trim())) found.email = "Enter a valid email"
     if (!form.password) found.password = "Enter your password"
 
     setErrors(found)
@@ -77,12 +77,11 @@ const LoginPage = () => {
   return (
     <AuthLayout
       title="Welcome back"
-      description="Sign in to track orders, save addresses and keep your cart in sync."
       notice={
         expired ? (
-          <AuthNotice>Your session timed out. Sign in again to pick up where you left off.</AuthNotice>
+          <AuthNotice>Your session timed out.</AuthNotice>
         ) : returnTo ? (
-          <AuthNotice>Sign in to continue with your purchase — your selection is saved.</AuthNotice>
+          <AuthNotice>Sign in to continue.</AuthNotice>
         ) : null
       }
       footer={

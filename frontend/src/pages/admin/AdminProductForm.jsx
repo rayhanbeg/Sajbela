@@ -423,7 +423,7 @@ const AdminProductForm = () => {
       />
 
       <div className="space-y-5">
-        <FormSection title="Basics" description="What the product is called and how it's described." icon={Info}>
+        <FormSection title="Basics" icon={Info}>
           <div className="grid gap-4">
             <FormField label="Product name" htmlFor="product-name" required error={errors.name}>
               {(field) => (
@@ -713,7 +713,7 @@ const AdminProductForm = () => {
             </Button>
           </FormSection>
         ) : (
-          <FormSection title="Stock" description="How many units are available to sell." icon={Boxes}>
+          <FormSection title="Stock" icon={Boxes}>
             <FormField
               label="Quantity"
               htmlFor="product-stock"

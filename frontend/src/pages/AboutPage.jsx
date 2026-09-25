@@ -1,164 +1,103 @@
-import { Award, Users, Truck, Shield } from "lucide-react"
+import { BadgeCheck, Hand, MessageCircle, Phone, Sparkles, Truck, Wallet } from "lucide-react"
+
+import PageHero from "../components/PageHero"
+import { CATEGORIES, SHIPPING, STORE, categoryPath } from "../lib/navigation"
+import { formatPrice } from "../lib/utils"
+import { Button } from "../components/ui"
+
+const VALUES = [
+  { icon: Hand, title: "Handmade", text: "Made in small batches by local artisans." },
+  { icon: BadgeCheck, title: "Checked", text: "Every piece inspected before it ships." },
+  { icon: Wallet, title: "Pay on delivery", text: "Cash on delivery, nationwide." },
+  { icon: Truck, title: "Free over " + formatPrice(SHIPPING.freeThreshold), text: "Delivered to all 64 districts." },
+]
 
 const AboutPage = () => {
-  const features = [
-    {
-      icon: Award,
-      title: "Premium Quality",
-      description: "We source only the finest materials and work with skilled artisans to create beautiful jewelry.",
-    },
-    {
-      icon: Users,
-      title: "Customer Focused",
-      description: "Your satisfaction is our priority. We provide excellent customer service and support.",
-    },
-    {
-      icon: Truck,
-      title: "Fast Delivery",
-      description: "Quick and reliable delivery across Bangladesh with cash on delivery option.",
-    },
-    {
-      icon: Shield,
-      title: "Secure Shopping",
-      description: "Shop with confidence knowing your personal information and payments are secure.",
-    },
-  ]
-
   return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="bg-gradient-to-r from-pink-50 to-purple-50 py-20">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">About সাজবেলা – Sajbela</h1>
-            <p className="text-lg text-gray-600 mb-8">
-              We are passionate about creating beautiful jewelry and cosmetics that celebrate the elegance and grace of
-              modern women. Our mission is to provide premium quality products that make every woman feel confident and
-              beautiful.
-            </p>
-          </div>
-        </div>
-      </section>
+    <>
+      <PageHero
+        icon={<Sparkles />}
+        title={`About ${STORE.nameBn} — ${STORE.name}`}
+        description="Handmade bangles, jewellery and cosmetics, delivered across Bangladesh."
+        breadcrumbs={[{ label: "About" }]}
+      />
 
-      {/* Story Section */}
-      <section className="py-16 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-6">Our Story</h2>
-              <div className="space-y-4 text-gray-600">
-                <p>
-                  Founded in 2020, সাজবেলা – Sajbela began as a dream to bring authentic, high-quality jewelry and
-                  cosmetics to women across Bangladesh. What started as a small venture has grown into a trusted brand
-                  known for its commitment to quality and customer satisfaction.
-                </p>
-                <p>
-                  Our name "সাজবেলা" reflects our Bengali heritage and means "time to get dressed up" or "adorning time."
-                  We believe that every moment is an opportunity for a woman to express her unique style and personality
-                  through beautiful accessories and cosmetics.
-                </p>
-                <p>
-                  Today, we serve thousands of customers across Bangladesh, offering a carefully curated selection of
-                  bangles, earrings, and premium metal cosmetics. Each product in our collection is chosen for its
-                  quality, craftsmanship, and ability to enhance natural beauty.
-                </p>
-              </div>
+      <div className="page-container py-10 md:py-14">
+        <div className="mx-auto max-w-3xl space-y-12">
+          {/* Story */}
+          <section>
+            <h2 className="text-lg font-semibold text-gray-900 md:text-xl">Our story</h2>
+
+            <div className="mt-3 space-y-3 text-sm leading-relaxed text-gray-600">
+              <p>
+                Sajbela started in 2020 with one shelf of glass bangles and a phone for taking orders. We now ship
+                handmade jewellery and cosmetics to shoppers in every district.
+              </p>
+              <p>
+                &ldquo;{STORE.nameBn}&rdquo; means <em>adorning time</em> — the few quiet minutes before you head out.
+                That&rsquo;s what we make things for.
+              </p>
             </div>
-            <div>
-              <img
-                src="/placeholder.svg?height=400&width=400"
-                alt="Our Story"
-                className="w-full h-auto rounded-lg shadow-lg"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+          </section>
 
-      {/* Values Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Why Choose Us</h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              We're committed to providing an exceptional shopping experience with products and services that exceed
-              expectations.
-            </p>
-          </div>
+          {/* Values */}
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">What you can count on</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {features.map((feature, index) => (
-              <div key={index} className="text-center">
-                <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <feature.icon className="h-8 w-8 text-pink-600" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-gray-600">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+            <ul className="mt-3 grid gap-4 sm:grid-cols-2">
+              {VALUES.map(({ icon: Icon, title, text }) => (
+                <li key={title} className="flex gap-3 rounded-card border border-gray-200 bg-white p-4 shadow-card">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-pink-100 text-pink-600"
+                  >
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{title}</p>
+                    <p className="mt-0.5 text-sm text-gray-600">{text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-      {/* Mission Section */}
-      <section className="py-16 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6">Our Mission</h2>
-            <p className="text-lg text-gray-600 mb-8">
-              To empower women by providing them with beautiful, high-quality jewelry and cosmetics that enhance their
-              natural beauty and boost their confidence. We strive to make luxury accessible and celebrate the unique
-              style of every woman.
+          {/* Categories */}
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">What we sell</h2>
+
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {CATEGORIES.map((category) => (
+                <li key={category.slug}>
+                  <Button to={categoryPath(category.slug)} variant="outline" size="sm">
+                    {category.label}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <div className="flex flex-col gap-2.5 rounded-card border border-pink-100 bg-pink-50 p-6 sm:flex-row sm:items-center">
+            <p className="flex-1 text-sm font-medium text-gray-900">
+              Questions before you order? We answer {STORE.hours}.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
-              <div className="text-center">
-                <h3 className="text-2xl font-bold text-pink-600 mb-2">500+</h3>
-                <p className="text-gray-600">Happy Customers</p>
-              </div>
-              <div className="text-center">
-                <h3 className="text-2xl font-bold text-pink-600 mb-2">100+</h3>
-                <p className="text-gray-600">Premium Products</p>
-              </div>
-              <div className="text-center">
-                <h3 className="text-2xl font-bold text-pink-600 mb-2">4.8/5</h3>
-                <p className="text-gray-600">Customer Rating</p>
-              </div>
+            <div className="flex flex-col gap-2.5 sm:flex-row">
+              <Button href={STORE.phoneHref} leftIcon={<Phone className="h-4 w-4" />}>
+                Call
+              </Button>
+              <Button
+                href={`https://wa.me/${STORE.whatsapp}`}
+                variant="outline"
+                leftIcon={<MessageCircle className="h-4 w-4" />}
+              >
+                WhatsApp
+              </Button>
             </div>
           </div>
         </div>
-      </section>
-
-      {/* Team Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Meet Our Team</h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Our dedicated team works tirelessly to curate the best products and provide exceptional customer service.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            {[
-              { name: "Fatima Khan", role: "Founder & CEO", image: "/placeholder.svg?height=300&width=300" },
-              { name: "Rashida Ahmed", role: "Head of Design", image: "/placeholder.svg?height=300&width=300" },
-              { name: "Sadia Rahman", role: "Customer Relations", image: "/placeholder.svg?height=300&width=300" },
-            ].map((member, index) => (
-              <div key={index} className="text-center">
-                <img
-                  src={member.image || "/placeholder.svg"}
-                  alt={member.name}
-                  className="w-32 h-32 rounded-full mx-auto mb-4 object-cover"
-                />
-                <h3 className="text-lg font-semibold text-gray-900">{member.name}</h3>
-                <p className="text-gray-600">{member.role}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
+      </div>
+    </>
   )
 }
 

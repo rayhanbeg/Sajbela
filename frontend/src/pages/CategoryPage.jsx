@@ -26,16 +26,6 @@ const ICONS = {
   combo: Gift,
 }
 
-const COPY = {
-  bangles: "Glass, metal and handmade bangles — sized to fit, made to be worn every day.",
-  earrings: "Studs, hoops and drops for everything from the school run to a wedding.",
-  cosmetics: "Everyday beauty picks, chosen for Bangladeshi skin and Bangladeshi weather.",
-  necklaces: "Chains, pendants and matched sets that layer as well as they stand alone.",
-  rings: "Statement pieces and quiet ones, in sizes that actually stay on.",
-  alna: "Traditional pieces for the occasions that deserve them.",
-  combo: "Matched sets priced below the cost of buying each piece on its own.",
-}
-
 const CategoryPage = () => {
   const { slug } = useParams()
   const category = getCategory(slug)
@@ -52,7 +42,7 @@ const CategoryPage = () => {
         <div className="page-container py-6 md:py-9">
           <Breadcrumbs items={[{ label: "Shop", to: "/products" }, { label: category.label }]} className="mb-4" />
 
-          <div className="flex items-start gap-4">
+          <div className="flex items-center gap-4">
             <span
               aria-hidden="true"
               className={cn(
@@ -67,9 +57,6 @@ const CategoryPage = () => {
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-pink-600">{category.tagline}</p>
               <h1 className="mt-1 text-display-sm font-bold text-gray-900">{category.label}</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-600 md:text-base">
-                {COPY[category.slug] || `Browse our ${category.label.toLowerCase()} collection.`}
-              </p>
             </div>
           </div>
 

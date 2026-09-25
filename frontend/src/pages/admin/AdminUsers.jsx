@@ -250,20 +250,14 @@ const AdminUsers = () => {
         <div className="grid gap-3 sm:grid-cols-3">
           <FormField label="Search" htmlFor="user-search" className="sm:col-span-2">
             {(field) => (
-              <div className="relative">
-                <Search
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                />
-                <Input
-                  {...field}
-                  type="search"
-                  value={searchDraft}
-                  onChange={(event) => setSearchDraft(event.target.value)}
-                  placeholder="Name or email"
-                  className="pl-9"
-                />
-              </div>
+              <Input
+                {...field}
+                type="search"
+                value={searchDraft}
+                onChange={(event) => setSearchDraft(event.target.value)}
+                placeholder="Name or email"
+                leftIcon={<Search />}
+              />
             )}
           </FormField>
 

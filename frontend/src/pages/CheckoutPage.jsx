@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Banknote,
   Lock,
+  Mail,
   MapPin,
   Package,
   ShieldCheck,
@@ -52,24 +53,35 @@ import {
  *    fields, and the submit failure renders next to the submit button.
  *  - Delivery charge, subtotal and the free-delivery threshold come from
  *    lib/cart so this page and the cart page can't disagree.
- *
- * The page still requires a login. Guest checkout is Phase 5 of the brief and
- * needs the order model to accept a null `user` plus a `guestInfo` block — the
- * form below is already shaped for it (name/phone/address are collected here,
- * not read from the account), so that phase only has to drop the gate.
+ *  - No account required. The page used to redirect anyone signed out straight
+ *    to /auth/login, which is the single most expensive thing a COD store can
+ *    do to its conversion rate. Everything it needs — name, phone, address —
+ *    was always collected here rather than read from the profile; the only
+ *    genuinely missing piece was an email to send the confirmation to, so
+ *    guests get one extra field and the order carries a `guestInfo` block.
  */
 
-const EMPTY_FORM = { fullName: "", phone: "", address: "", district: "", thana: "" }
+const EMPTY_FORM = { fullName: "", email: "", phone: "", address: "", district: "", thana: "" }
 
-function validate(form) {
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+function validate(form, { requireEmail }) {
   const errors = {}
 
-  if (!form.fullName.trim()) errors.fullName = "We need a name for the delivery"
-  if (!form.phone.trim()) errors.phone = "A phone number is required"
-  else if (!validatePhone(form.phone.replace(/\s+/g, ""))) errors.phone = "Enter a valid number, e.g. 01712345678"
-  if (!form.address.trim()) errors.address = "Enter the house, road and area"
+  if (!form.fullName.trim()) errors.fullName = "Enter your name"
+  if (!form.phone.trim()) errors.phone = "Enter a phone number"
+  else if (!validatePhone(form.phone.replace(/\s+/g, ""))) errors.phone = "Enter a valid number"
+
+  // Only guests are asked: a signed-in shopper's confirmation goes to the
+  // address on their account.
+  if (requireEmail) {
+    if (!form.email.trim()) errors.email = "Enter your email"
+    else if (!EMAIL_PATTERN.test(form.email.trim())) errors.email = "Enter a valid email"
+  }
+
+  if (!form.address.trim()) errors.address = "Enter your address"
   if (!form.district.trim()) errors.district = "Select a district"
-  if (!form.thana.trim()) errors.thana = "Enter the thana or upazila"
+  if (!form.thana.trim()) errors.thana = "Enter a thana or upazila"
 
   return errors
 }
@@ -97,12 +109,6 @@ const CheckoutPage = () => {
   const totals = cartTotals(lines, form.district)
   const count = totalItemCount(lines)
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate(`/auth/login?returnTo=${encodeURIComponent("/checkout")}`, { replace: true })
-    }
-  }, [isAuthenticated, navigate])
-
   /** Prefill from the saved default address so returning shoppers can just pay. */
   useEffect(() => {
     if (!isAuthenticated) {
@@ -121,6 +127,7 @@ const CheckoutPage = () => {
 
         setForm({
           fullName: preferred?.fullName || user?.name || "",
+          email: user?.email || "",
           phone: preferred?.phone || user?.phone || "",
           address: preferred?.address || "",
           district: preferred?.district || "",
@@ -131,14 +138,20 @@ const CheckoutPage = () => {
       })
       .catch((error) => {
         console.error("Could not prefill address:", error)
-        if (!cancelled) setForm((prev) => ({ ...prev, fullName: user?.name || "", phone: user?.phone || "" }))
+        if (!cancelled)
+          setForm((prev) => ({
+            ...prev,
+            fullName: user?.name || "",
+            email: user?.email || "",
+            phone: user?.phone || "",
+          }))
       })
       .finally(() => !cancelled && setAddressLoaded(true))
 
     return () => {
       cancelled = true
     }
-  }, [isAuthenticated, user?.name, user?.phone])
+  }, [isAuthenticated, user?.name, user?.email, user?.phone])
 
   const update = (field) => (event) => {
     const { value } = event.target
@@ -167,7 +180,7 @@ const CheckoutPage = () => {
   const handleSubmit = async (event) => {
     event.preventDefault()
 
-    const found = validate(form)
+    const found = validate(form, { requireEmail: !isAuthenticated })
     setErrors(found)
 
     if (Object.keys(found).length > 0) {
@@ -191,6 +204,16 @@ const CheckoutPage = () => {
           country: "Bangladesh",
           phone: form.phone.replace(/\s+/g, ""),
         },
+        // Ignored by the server when the request carries a token.
+        ...(isAuthenticated
+          ? {}
+          : {
+              guestInfo: {
+                name: form.fullName.trim(),
+                email: form.email.trim(),
+                phone: form.phone.replace(/\s+/g, ""),
+              },
+            }),
         paymentMethod,
         itemsPrice: totals.subtotal,
         taxPrice: 0,
@@ -202,7 +225,8 @@ const CheckoutPage = () => {
       setPlaced(true)
 
       // Best-effort: a failed address save must never lose a placed order.
-      if (saveAddress) {
+      // Guests have no address book to save into.
+      if (saveAddress && isAuthenticated) {
         addressesAPI
           .create({
             fullName: form.fullName.trim(),
@@ -216,7 +240,8 @@ const CheckoutPage = () => {
           .catch((error) => console.error("Could not save address for next time:", error))
       }
 
-      // The server already empties the cart; this syncs the client.
+      // Empties whichever cart the shopper has — the server's, or the local
+      // guest store.
       dispatch(clearCartAsync())
 
       navigate("/order-success", {
@@ -240,8 +265,6 @@ const CheckoutPage = () => {
 
   /* ── Guards ───────────────────────────────────────────────── */
 
-  if (!isAuthenticated) return null
-
   if (!addressLoaded || (!initialized && cartLoading)) return <CheckoutSkeleton />
 
   if (lines.length === 0 && !placed) {
@@ -252,7 +275,7 @@ const CheckoutPage = () => {
           <EmptyState
             icon={<ShoppingBag />}
             title="There's nothing to check out"
-            description="Your cart is empty. Add something you like and come back."
+            description="Your cart is empty."
             action={<Button to="/products" size="lg">Browse products</Button>}
             className="rounded-card border border-gray-100 bg-white shadow-card"
           />
@@ -269,12 +292,21 @@ const CheckoutPage = () => {
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_23rem] lg:gap-8">
           {/* ── Left: details ──────────────────────────────── */}
           <div className="space-y-5 md:space-y-6">
-            <Panel
-              icon={<MapPin />}
-              title="Delivery details"
-              description="Where should we send your order?"
-              step={1}
-            >
+            {/*
+              Offered, not required. Signing in prefills the saved address and
+              keeps the order in the shopper's history — a reason to do it,
+              rather than a wall in front of the purchase.
+            */}
+            {!isAuthenticated && (
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-card border border-gray-100 bg-white px-5 py-3.5 shadow-card">
+                <p className="text-sm font-medium text-gray-900">Checking out as a guest</p>
+                <Button to="/auth/login?returnTo=%2Fcheckout" variant="outline" size="sm">
+                  Sign in
+                </Button>
+              </div>
+            )}
+
+            <Panel icon={<MapPin />} title="Delivery details" step={1}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField label="Full name" required error={errors.fullName} htmlFor="checkout-fullName">
                   {(field) => (
@@ -311,6 +343,35 @@ const CheckoutPage = () => {
                 </FormField>
               </div>
 
+              {/*
+                Guests only. It's the one thing checkout genuinely can't get
+                from the form already — without it there's no way to send the
+                confirmation or for them to look the order up later.
+              */}
+              {!isAuthenticated && (
+                <FormField
+                  label="Email address"
+                  required
+                  error={errors.email}
+                  hint="For your order confirmation"
+                  htmlFor="checkout-email"
+                  className="mt-4"
+                >
+                  {(field) => (
+                    <Input
+                      {...field}
+                      size="lg"
+                      type="email"
+                      value={form.email}
+                      onChange={update("email")}
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      leftIcon={<Mail />}
+                    />
+                  )}
+                </FormField>
+              )}
+
               <FormField
                 label="Full address"
                 required
@@ -325,7 +386,7 @@ const CheckoutPage = () => {
                     value={form.address}
                     onChange={update("address")}
                     autoComplete="street-address"
-                    placeholder="House / flat, road, area — anything that helps the courier find you"
+                    placeholder="House / flat, road, area"
                   />
                 )}
               </FormField>
@@ -365,32 +426,33 @@ const CheckoutPage = () => {
               </div>
 
               {/* Delivery charge follows the district, so say so where it's chosen. */}
-              <p className="mt-4 flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
-                <Truck aria-hidden="true" className="mt-px h-4 w-4 shrink-0 text-gray-400" />
+              <p className="mt-4 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-xs text-gray-600">
+                <Truck aria-hidden="true" className="h-4 w-4 shrink-0 text-gray-400" />
                 <span>
-                  Inside Dhaka {formatPrice(SHIPPING.insideDhaka)} &middot; outside Dhaka{" "}
-                  {formatPrice(SHIPPING.outsideDhaka)} &middot; free over {formatPrice(SHIPPING.freeThreshold)}.
-                  Delivery takes 2&ndash;3 working days.
+                  Dhaka {formatPrice(SHIPPING.insideDhaka)} &middot; outside{" "}
+                  {formatPrice(SHIPPING.outsideDhaka)} &middot; free over {formatPrice(SHIPPING.freeThreshold)}
                 </span>
               </p>
 
               {/* Checkbox spreads className onto the input, so the spacing
                   goes on a wrapper rather than the control itself. */}
-              <div className="mt-4">
-                <Checkbox
-                  checked={saveAddress}
-                  onChange={(event) => setSaveAddress(event.target.checked)}
-                  label="Save this address for next time"
-                />
-              </div>
+              {isAuthenticated && (
+                <div className="mt-4">
+                  <Checkbox
+                    checked={saveAddress}
+                    onChange={(event) => setSaveAddress(event.target.checked)}
+                    label="Save this address for next time"
+                  />
+                </div>
+              )}
             </Panel>
 
-            <Panel icon={<Banknote />} title="Payment" description="Pay when your order arrives." step={2}>
+            <Panel icon={<Banknote />} title="Payment" step={2}>
               <div className="space-y-3">
                 <RadioCard
                   name="payment"
                   label="Cash on delivery"
-                  description="Hand the courier the exact amount when your parcel arrives."
+                  description="Pay the courier when it arrives."
                   icon={<Banknote className="h-5 w-5" />}
                   checked={paymentMethod === "cash_on_delivery"}
                   onChange={() => setPaymentMethod("cash_on_delivery")}
@@ -400,7 +462,6 @@ const CheckoutPage = () => {
                 <RadioCard
                   name="payment"
                   label="bKash"
-                  description="Mobile payment is being set up."
                   icon={<Smartphone className="h-5 w-5" />}
                   checked={false}
                   disabled
@@ -491,20 +552,18 @@ const CheckoutPage = () => {
                 </div>
 
                 {totals.estimated && (
-                  <p className="pt-1 text-xs leading-relaxed text-gray-500">
-                    Pick your district above for the exact delivery charge.
-                  </p>
+                  <p className="pt-1 text-xs text-gray-500">Select a district for the exact charge.</p>
                 )}
               </dl>
 
               <ul className="space-y-2 border-t border-gray-100 px-5 py-4 text-xs text-gray-600">
                 <li className="flex items-center gap-2">
                   <ShieldCheck aria-hidden="true" className="h-4 w-4 shrink-0 text-green-600" />
-                  No payment until your parcel arrives
+                  Pay on delivery
                 </li>
                 <li className="flex items-center gap-2">
                   <Lock aria-hidden="true" className="h-4 w-4 shrink-0 text-gray-400" />
-                  Your details are only used for this delivery
+                  Details used for this delivery only
                 </li>
               </ul>
             </div>
@@ -556,9 +615,9 @@ const CheckoutHeader = () => (
 )
 
 /** One titled section of the form. */
-const Panel = ({ icon, title, description, step, children }) => (
+const Panel = ({ icon, title, step, children }) => (
   <section className="overflow-hidden rounded-card border border-gray-100 bg-white shadow-card">
-    <div className="flex items-start gap-3 border-b border-gray-100 px-5 py-4">
+    <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-4">
       <span
         aria-hidden="true"
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pink-50 text-pink-600 [&_svg]:h-[1.125rem] [&_svg]:w-[1.125rem]"
@@ -566,13 +625,10 @@ const Panel = ({ icon, title, description, step, children }) => (
         {icon}
       </span>
 
-      <div className="min-w-0">
-        <h2 className="text-base font-semibold text-gray-900">
-          {step && <span className="text-gray-400">{step}. </span>}
-          {title}
-        </h2>
-        {description && <p className="mt-0.5 text-sm text-gray-500">{description}</p>}
-      </div>
+      <h2 className="min-w-0 text-base font-semibold text-gray-900">
+        {step && <span className="text-gray-400">{step}. </span>}
+        {title}
+      </h2>
     </div>
 
     <div className="p-5">{children}</div>

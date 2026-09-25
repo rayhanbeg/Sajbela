@@ -15,10 +15,10 @@ const Footer = () => {
   const year = new Date().getFullYear()
 
   const trustItems = [
-    { icon: Truck, title: "Free delivery", text: `On orders over ${formatPrice(SHIPPING.freeThreshold)}` },
-    { icon: ShieldCheck, title: "Cash on delivery", text: "Pay when it arrives" },
-    { icon: BadgeCheck, title: "Authentic products", text: "100% handmade quality" },
-    { icon: Clock, title: "24/7 support", text: "We're always reachable" },
+    { icon: Truck, text: `Free delivery over ${formatPrice(SHIPPING.freeThreshold)}` },
+    { icon: ShieldCheck, text: "Cash on delivery" },
+    { icon: BadgeCheck, text: "100% handmade" },
+    { icon: Clock, text: "24/7 support" },
   ]
 
   const socials = [
@@ -35,19 +35,16 @@ const Footer = () => {
     <footer className="mt-auto bg-gray-900 pb-bottom-nav text-white md:pb-0">
       {/* Trust strip */}
       <div className="border-b border-white/10">
-        <div className="page-container grid grid-cols-2 gap-x-4 gap-y-6 py-8 lg:grid-cols-4">
-          {trustItems.map(({ icon: Icon, title, text }) => (
-            <div key={title} className="flex items-start gap-3">
+        <div className="page-container grid grid-cols-2 gap-x-4 gap-y-4 py-7 lg:grid-cols-4">
+          {trustItems.map(({ icon: Icon, text }) => (
+            <div key={text} className="flex items-center gap-2.5">
               <span
                 aria-hidden="true"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-pink-600/15 text-pink-400"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pink-600/15 text-pink-400"
               >
-                <Icon className="h-5 w-5" />
+                <Icon className="h-4 w-4" />
               </span>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">{title}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{text}</p>
-              </div>
+              <p className="min-w-0 text-sm font-medium text-white">{text}</p>
             </div>
           ))}
         </div>
@@ -62,8 +59,8 @@ const Footer = () => {
           <p className="text-lg font-bold text-pink-400">
             {STORE.nameBn} &ndash; {STORE.name}
           </p>
-          <p className="mt-2 max-w-xs text-sm leading-relaxed text-gray-400">
-            Premium quality bangles and cosmetics for the modern woman. Elegance and beauty in every piece.
+          <p className="mt-2 max-w-xs text-sm text-gray-400">
+            Handmade bangles, jewelry and cosmetics.
           </p>
 
           <ul className="mt-5 flex items-center gap-2">
@@ -121,13 +118,6 @@ const Footer = () => {
                 </Link>
               </li>
             ))}
-            {LEGAL_NAV.map((item) => (
-              <li key={item.to}>
-                <Link to={item.to} className={columnLinkClass}>
-                  {item.label}
-                </Link>
-              </li>
-            ))}
           </ul>
         </nav>
 
@@ -153,10 +143,7 @@ const Footer = () => {
           </ul>
 
           <div className="mt-6 rounded-card border border-white/10 bg-white/5 p-4">
-            <p className="text-sm font-semibold text-white">Need help choosing?</p>
-            <p className="mt-1 text-xs leading-relaxed text-gray-400">
-              Message us on WhatsApp and we&rsquo;ll help you pick the right size and colour.
-            </p>
+            <p className="text-sm font-semibold text-white">Need help?</p>
             <a
               href={`https://wa.me/${STORE.whatsapp}`}
               target="_blank"

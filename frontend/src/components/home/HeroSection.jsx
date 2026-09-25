@@ -77,8 +77,7 @@ const HeroSection = () => {
             </h1>
 
             <p className="mt-3.5 text-sm leading-relaxed text-gray-600 md:text-base">
-              Handmade bangles, everyday earrings and beauty picks — chosen piece by piece, delivered across Bangladesh
-              with cash on delivery.
+              Handmade bangles, earrings and beauty picks. Cash on delivery across Bangladesh.
             </p>
 
             <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">

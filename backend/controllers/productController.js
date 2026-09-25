@@ -1,12 +1,31 @@
 import Product from "../models/Product.js"
 
+/**
+ * `?section=` shortcuts for the curated home-page rails, so "View all new
+ * arrivals" lands on a filtered catalogue instead of the unfiltered one. The
+ * storefront previously linked to /products?section=new-arrivals, which this
+ * handler ignored entirely.
+ */
+const SECTIONS = {
+  "new-arrivals": { isNewArrival: true },
+  combo: { isCombo: true },
+}
+
 // Get all products with filtering and pagination
 export const getProducts = async (req, res) => {
   try {
-    console.log("=== GET PRODUCTS API CALLED ===")
-    console.log("Query parameters received:", req.query)
-
-    const { category, search, page = 1, limit = 12, sort = "createdAt", color, price, minPrice, maxPrice } = req.query
+    const {
+      category,
+      search,
+      page = 1,
+      limit = 12,
+      sort = "createdAt",
+      color,
+      price,
+      minPrice,
+      maxPrice,
+      section,
+    } = req.query
 
     // Build the query object
     //
@@ -17,14 +36,13 @@ export const getProducts = async (req, res) => {
     // error at checkout. Admin listing is a separate handler below.
     const query = { isActive: { $ne: false } }
 
-    console.log("Building query...")
+    if (section && SECTIONS[section]) {
+      Object.assign(query, SECTIONS[section])
+    }
 
-    // Category filter - FIXED with case-insensitive matching
+    // Category filter — case-insensitive.
     if (category && category.trim() !== "" && category !== "all") {
       query.category = { $regex: new RegExp(`^${category.trim()}$`, "i") }
-      console.log("✅ Category filter applied:", query.category)
-    } else {
-      console.log("❌ No category filter applied")
     }
 
     /*
@@ -35,7 +53,6 @@ export const getProducts = async (req, res) => {
      */
     const orConditions = []
 
-    // Search filter
     if (search && search.trim() !== "") {
       orConditions.push({
         $or: [
@@ -44,10 +61,8 @@ export const getProducts = async (req, res) => {
           { tags: { $in: [new RegExp(search.trim(), "i")] } },
         ],
       })
-      console.log("✅ Search filter applied:", search.trim())
     }
 
-    // Color filter
     if (color && color.trim() !== "") {
       orConditions.push({
         $or: [
@@ -55,7 +70,6 @@ export const getProducts = async (req, res) => {
           { color: { $regex: new RegExp(color.trim(), "i") } },
         ],
       })
-      console.log("✅ Color filter applied:", color.trim())
     }
 
     if (orConditions.length > 0) {
@@ -70,15 +84,11 @@ export const getProducts = async (req, res) => {
         const [min, max] = price.split("-").map(Number)
         if (min) query.price.$gte = min
         if (max && max !== 999999) query.price.$lte = max
-        console.log("✅ Price range filter (from price param):", query.price)
       } else {
         if (minPrice) query.price.$gte = Number(minPrice)
         if (maxPrice) query.price.$lte = Number(maxPrice)
-        console.log("✅ Price range filter (from min/max params):", query.price)
       }
     }
-
-    console.log("Final query object:", JSON.stringify(query, null, 2))
 
     // Build sort options
     const sortOptions = {}
@@ -108,57 +118,28 @@ export const getProducts = async (req, res) => {
         sortOptions.createdAt = -1
     }
 
-    console.log("Sort options:", sortOptions)
-
     // Calculate pagination
     const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit)
     const limitNum = Number.parseInt(limit)
 
-    console.log("Pagination:", { page, skip, limit: limitNum })
+    const [products, total] = await Promise.all([
+      Product.find(query).sort(sortOptions).skip(skip).limit(limitNum).lean(),
+      Product.countDocuments(query),
+    ])
 
-    // Execute the query
-    console.log("Executing database query...")
-    const products = await Product.find(query).sort(sortOptions).skip(skip).limit(limitNum).lean()
-
-    console.log(`✅ Found ${products.length} products`)
-
-    // Log sample products for debugging
-    if (products.length > 0) {
-      console.log("Sample products:")
-      products.slice(0, 3).forEach((product, index) => {
-        console.log(`  ${index + 1}. ${product.name} (Category: ${product.category})`)
-      })
-    }
-
-    // Get total count
-    const total = await Product.countDocuments(query)
-    console.log(`✅ Total products matching query: ${total}`)
-
-    const totalPages = Math.ceil(total / limitNum)
-
-    const response = {
+    res.json({
       success: true,
       products,
       pagination: {
         currentPage: Number.parseInt(page),
-        totalPages,
+        totalPages: Math.ceil(total / limitNum),
         total,
         hasNext: skip + limitNum < total,
         hasPrev: Number.parseInt(page) > 1,
       },
-    }
-
-    console.log("=== RESPONSE SENT ===")
-    console.log("Response summary:", {
-      productsCount: products.length,
-      total,
-      currentPage: response.pagination.currentPage,
-      totalPages: response.pagination.totalPages,
     })
-
-    res.json(response)
   } catch (error) {
-    console.error("❌ Get products error:", error)
+    console.error("Get products error:", error)
     res.status(500).json({
       success: false,
       message: "Server error fetching products",
