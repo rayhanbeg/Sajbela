@@ -42,7 +42,7 @@ const SectionHeader = ({
         <Link
           to={actionTo}
           className={cn(
-            "group inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-pink-600",
+            "group inline-flex shrink-0 items-center gap-1 text-sm font-medium text-pink-600",
             "transition-colors hover:text-pink-700",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2 rounded",
             centered && "mt-4",

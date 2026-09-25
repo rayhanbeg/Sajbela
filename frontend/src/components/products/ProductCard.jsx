@@ -99,12 +99,17 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
       )}
     >
       {/*
-        Square frame, not 4/3 landscape. Product photos are uploaded through a
-        Cloudinary `c_limit` at 800x800, so they arrive square or portrait —
-        inside a landscape box `object-contain` left a wide grey band down each
-        side and the card came out short and mostly empty. Square also means
-        every card in a grid has an identical image height, so the titles and
-        price rows line up across the row without a subgrid.
+        Square frame, `object-cover`, no letterboxing.
+        Two things were wrong before. The frame was 4/3 landscape while the
+        photos arrive square or portrait (Cloudinary `c_limit` at 800x800), and
+        `object-contain` then left a dead band down each side — so the card was
+        tall and mostly empty, with the price row stranded a long way below the
+        title. Square plus cover means the photo fills the frame edge to edge at
+        every breakpoint: no bands, no wasted height, and an identical image
+        height for every card in a row so titles and prices line up without a
+        subgrid. Cover trims about an eighth off the top and bottom of a 3:4
+        shot, which these lifestyle photos have to spare — they aren't
+        white-background packshots that need to be shown whole.
       */}
       <div className="relative overflow-hidden">
         <Image
@@ -113,7 +118,7 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
           aspect="square"
           priority={priority}
           sizes={sizes}
-          fit="contain"
+          fit="cover"
           background="bg-white"
           imgClassName={cn(
             "transition-transform duration-500 ease-out-expo group-hover:scale-105",
@@ -132,7 +137,7 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
             aria-hidden="true"
             aspect="square"
             sizes={sizes}
-            fit="contain"
+            fit="cover"
             background="bg-white"
             className={cn(
               "absolute inset-0 transition-opacity duration-500 ease-in-out-smooth",

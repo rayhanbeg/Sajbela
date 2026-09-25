@@ -14,6 +14,13 @@ import { SectionHeader } from "../ui"
  *
  * The emoji icons were swapped for lucide glyphs — emoji render at different
  * sizes and weights on Android, iOS and Windows, so the tiles never lined up.
+ *
+ * Design note: each tile used to be a raised white card with a shadow, a hover
+ * lift and a saturated gradient disc, seven of them in a row in seven different
+ * hues. That's a lot of chrome for what is really just a list of seven links.
+ * They're flat now — one hairline border, the icon inked rather than filled,
+ * and the label doing the identifying. Type scale runs 13px → 14px against the
+ * section heading, so the tiles read as one step down from it rather than three.
  */
 
 const ICONS = {
@@ -30,7 +37,7 @@ const CategorySection = () => {
   return (
     <section className="bg-gray-50 py-8 md:py-12">
       <div className="page-container">
-        <SectionHeader title="Shop by category" align="left" actionLabel="Shop all" actionTo="/products" />
+        <SectionHeader title="Categories" align="left" actionLabel="View all" actionTo="/products" />
 
         {/*
           Mobile is a snap rail rather than a grid: seven items in a 3- or
@@ -39,39 +46,32 @@ const CategorySection = () => {
         */}
         <ul
           className={cn(
-            "-mx-4 flex snap-x-mandatory gap-3 overflow-x-auto px-4 pb-2 scrollbar-hide",
-            "sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0 sm:pb-0",
-            "lg:grid-cols-7 lg:gap-4",
+            "-mx-4 flex snap-x-mandatory gap-2.5 overflow-x-auto px-4 pb-1 scrollbar-hide",
+            "sm:mx-0 sm:grid sm:grid-cols-4 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0",
+            "lg:grid-cols-7",
           )}
         >
           {CATEGORIES.map((category) => {
             const Icon = ICONS[category.slug] || Circle
 
             return (
-              <li key={category.slug} className="w-[5.75rem] shrink-0 snap-start-always sm:w-auto">
+              <li key={category.slug} className="w-[5.25rem] shrink-0 snap-start-always sm:w-auto">
                 <Link
                   to={categoryPath(category.slug)}
                   className={cn(
-                    "group flex h-full flex-col items-center gap-2 rounded-card border border-transparent bg-white p-3 text-center",
-                    "shadow-card transition-all duration-300 ease-out-expo",
-                    "hover:-translate-y-1 hover:border-pink-100 hover:shadow-card-hover",
+                    "group flex h-full flex-col items-center gap-2 rounded-card border border-gray-200 bg-white px-2 py-3.5",
+                    "text-center transition-colors duration-200",
+                    "hover:border-pink-300 hover:bg-pink-50/40",
                     "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
-                    "md:p-4",
                   )}
                 >
-                  <span
+                  <Icon
                     aria-hidden="true"
-                    className={cn(
-                      "flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br text-white",
-                      "transition-transform duration-300 ease-out-expo group-hover:scale-110",
-                      "md:h-14 md:w-14",
-                      category.accent,
-                    )}
-                  >
-                    <Icon className="h-5 w-5 md:h-6 md:w-6" strokeWidth={2} />
-                  </span>
+                    className="h-6 w-6 text-gray-400 transition-colors group-hover:text-pink-600"
+                    strokeWidth={1.75}
+                  />
 
-                  <span className="text-xs font-medium leading-tight text-gray-900 transition-colors group-hover:text-pink-600 md:text-sm">
+                  <span className="text-[0.8125rem] font-medium leading-tight text-gray-800 transition-colors group-hover:text-pink-600 sm:text-sm">
                     {category.label}
                   </span>
                 </Link>

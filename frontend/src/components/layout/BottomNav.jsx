@@ -17,6 +17,10 @@ import { CountBadge } from "../ui"
  *  - The bar is 4rem tall + the safe-area inset; <main> carries a matching
  *    `pb-bottom-nav` (see App.jsx) so content is never hidden behind it.
  *  - Hidden from md up, where the top navbar takes over.
+ *  - The active tab is marked by colour and label weight only. There used to be
+ *    a pink pill along the top edge of the cell plus an icon scale-up; between
+ *    the two, the tint, the badge and the safe-area inset there was too much
+ *    happening in a 64px bar.
  */
 
 const BottomNav = ({ onSearchClick, onCartClick }) => {
@@ -88,40 +92,20 @@ const BottomNav = ({ onSearchClick, onCartClick }) => {
           const content = (
             <>
               <span className="relative flex items-center justify-center">
-                <Icon
-                  aria-hidden="true"
-                  className={cn(
-                    "h-[22px] w-[22px] transition-transform duration-200 ease-out-expo",
-                    active && "scale-110",
-                  )}
-                  strokeWidth={active ? 2.4 : 1.8}
-                />
+                <Icon aria-hidden="true" className="h-[22px] w-[22px]" strokeWidth={active ? 2.4 : 1.8} />
                 {item.badge > 0 && <CountBadge count={item.badge} className="-right-2.5 -top-1.5" label={null} />}
               </span>
 
               <span
-                className={cn(
-                  "text-[0.6875rem] leading-none transition-all duration-200",
-                  active ? "font-semibold" : "font-medium",
-                )}
+                className={cn("text-[0.6875rem] leading-none", active ? "font-semibold" : "font-medium")}
               >
                 {item.label}
               </span>
-
-              {/* Active indicator pill along the top edge of the cell. */}
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "absolute inset-x-0 top-0 mx-auto h-0.5 w-8 rounded-full bg-pink-600",
-                  "transition-all duration-300 ease-out-expo",
-                  active ? "opacity-100" : "w-0 opacity-0",
-                )}
-              />
             </>
           )
 
           const cellClass = cn(
-            "relative flex h-full w-full flex-col items-center justify-center gap-1",
+            "flex h-full w-full flex-col items-center justify-center gap-1",
             "transition-colors duration-200",
             "focus:outline-none focus-visible:bg-pink-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500",
             active ? "text-pink-600" : "text-gray-500 hover:text-gray-700",
