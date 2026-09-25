@@ -38,7 +38,7 @@ const ITEMS = [
 
 const TrustBadges = () => {
   return (
-    <section aria-label="Why shop with Sajbela" className="border-y border-gray-100 bg-white">
+    <section aria-label="Why shop with Sajbela" className="hidden border-y border-gray-100 bg-white md:block">
       <div className="page-container py-6 md:py-8">
         <ul className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {ITEMS.map(({ icon: Icon, title, description }) => (

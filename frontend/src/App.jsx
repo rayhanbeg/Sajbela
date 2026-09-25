@@ -40,6 +40,7 @@ const AdminProducts = lazy(() => import("./pages/admin/AdminProducts"))
 const AdminProductForm = lazy(() => import("./pages/admin/AdminProductForm"))
 const AdminOrders = lazy(() => import("./pages/admin/AdminOrders"))
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"))
+const AdminBanners = lazy(() => import("./pages/admin/AdminBanners"))
 
 /** Scrolls to the top on every route change. */
 const ScrollToTop = () => {
@@ -155,6 +156,7 @@ function App() {
               <Route path="/admin/products/:id/edit" element={<AdminProductForm />} />
               <Route path="/admin/orders" element={<AdminOrders />} />
               <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/banners" element={<AdminBanners />} />
             </Route>
           </Routes>
         </Suspense>

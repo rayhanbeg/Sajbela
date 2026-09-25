@@ -7,6 +7,7 @@ import {
   LogOut,
   Menu,
   Package,
+  Image,
   PanelLeft,
   PanelLeftClose,
   ShoppingBag,
@@ -39,6 +40,7 @@ import { logout } from "../../lib/store/authSlice"
 const NAV_ITEMS = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/products", label: "Products", icon: Package },
+  { to: "/admin/banners", label: "Banners", icon: Image },
   { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { to: "/admin/users", label: "Customers", icon: Users },
 ]
@@ -47,6 +49,7 @@ const COLLAPSE_KEY = "sajbela.admin.sidebarCollapsed"
 
 const CRUMB_LABELS = {
   products: "Products",
+  banners: "Banners",
   orders: "Orders",
   users: "Customers",
   new: "New product",

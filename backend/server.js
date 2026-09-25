@@ -13,6 +13,7 @@ import uploadRoutes from "./routes/upload.js"
 import userRoutes from "./routes/users.js"
 import reviewRoutes from "./routes/reviews.js"
 import cartRoutes from "./routes/cart.js"
+import bannerRoutes from "./routes/banners.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -41,6 +42,7 @@ app.use("/api/upload", uploadRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/reviews", reviewRoutes)
 app.use("/api/cart", cartRoutes)
+app.use("/api/banners", bannerRoutes)
 
 // Health check
 app.get("/api", (req, res) => {

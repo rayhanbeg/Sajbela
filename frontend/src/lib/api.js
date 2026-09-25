@@ -78,6 +78,15 @@ export const productsAPI = {
   delete: (id) => api.delete(`/products/${id}`),
 }
 
+// Hero banners API
+export const bannersAPI = {
+  getAll: () => api.get("/banners"),
+  getAdminList: () => api.get("/banners/admin/list"),
+  create: (banner) => api.post("/banners", banner),
+  update: (id, banner) => api.put("/banners/" + id, banner),
+  delete: (id) => api.delete("/banners/" + id),
+}
+
 // Orders API
 export const ordersAPI = {
   create: (orderData) => api.post("/orders", orderData),
