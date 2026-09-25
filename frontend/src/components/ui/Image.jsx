@@ -31,6 +31,15 @@ const Image = ({
   width,
   sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw",
   priority = false,
+  /*
+   * The colour behind the image. Matters for `fit="contain"`, where whatever
+   * is behind it shows as a letterbox band — a product shot on a white studio
+   * background needs `bg-white` here or it gets a visible grey frame. This is
+   * a prop rather than something you pass through `className` because `cn()`
+   * doesn't resolve Tailwind conflicts, so `bg-white` in className would lose
+   * to the base class depending on stylesheet order.
+   */
+  background = "bg-gray-100",
   className,
   imgClassName,
   rounded = "",
@@ -46,7 +55,7 @@ const Image = ({
   const srcSet = isPlaceholder ? undefined : cloudinarySrcSet(resolvedSrc)
 
   return (
-    <div className={cn("relative overflow-hidden bg-gray-100", ASPECTS[aspect] ?? ASPECTS.square, rounded, className)}>
+    <div className={cn("relative overflow-hidden", background, ASPECTS[aspect] ?? ASPECTS.square, rounded, className)}>
       <img
         src={optimisedSrc}
         srcSet={srcSet}

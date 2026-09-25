@@ -8,7 +8,7 @@ import { validateEmail, validatePhone } from "../../lib/utils"
 import AuthLayout, { AuthDivider, AuthError, AuthNotice } from "../../components/auth/AuthLayout"
 import GoogleSignIn from "../../components/auth/GoogleSignIn"
 import PasswordField, { PasswordStrength } from "../../components/auth/PasswordField"
-import { Button, Checkbox, FormField, Input } from "../../components/ui"
+import { Button, FormField, Input } from "../../components/ui"
 
 /**
  * Create an account.
@@ -21,11 +21,19 @@ import { Button, Checkbox, FormField, Input } from "../../components/ui"
  *
  * Phone is marked required because the User model requires it — the old form
  * labelled it optional and then let the request fail on the way in.
+ *
+ * Two controls were dropped to get this down to four fields:
+ *  - "Confirm password". PasswordField has a show/hide toggle, so a typo is
+ *    already recoverable by looking; a second identical field mostly produced
+ *    a "Passwords don't match" error on a password that was fine.
+ *  - The terms checkbox. Consent is now a sentence under the submit button,
+ *    which is where Google, Shopify and Stripe put it. Same agreement, one
+ *    less required interaction and one less error state in the form.
  */
 
-const EMPTY = { name: "", email: "", phone: "", password: "", confirmPassword: "" }
+const EMPTY = { name: "", email: "", phone: "", password: "" }
 
-function validate(form, agreed) {
+function validate(form) {
   const errors = {}
 
   if (!form.name.trim()) errors.name = "Enter your name"
@@ -40,11 +48,6 @@ function validate(form, agreed) {
   if (!form.password) errors.password = "Choose a password"
   else if (form.password.length < 6) errors.password = "Use at least 6 characters"
 
-  if (!form.confirmPassword) errors.confirmPassword = "Re-enter your password"
-  else if (form.password !== form.confirmPassword) errors.confirmPassword = "Passwords don't match"
-
-  if (!agreed) errors.terms = "Accept the terms to continue"
-
   return errors
 }
 
@@ -56,7 +59,6 @@ const RegisterPage = () => {
 
   const [form, setForm] = useState(EMPTY)
   const [errors, setErrors] = useState({})
-  const [agreed, setAgreed] = useState(false)
 
   const returnTo = new URLSearchParams(location.search).get("returnTo")
 
@@ -88,12 +90,12 @@ const RegisterPage = () => {
   const handleSubmit = (event) => {
     event.preventDefault()
 
-    const found = validate(form, agreed)
+    const found = validate(form)
     setErrors(found)
 
     const first = Object.keys(found)[0]
     if (first) {
-      document.getElementById(first === "terms" ? "register-terms" : `register-${first}`)?.focus()
+      document.getElementById(`register-${first}`)?.focus()
       return
     }
 
@@ -111,7 +113,7 @@ const RegisterPage = () => {
 
   return (
     <AuthLayout
-      title="Create your account"
+      title="Create account"
       notice={returnTo ? <AuthNotice>Create an account to continue.</AuthNotice> : null}
       footer={
         <>
@@ -125,22 +127,21 @@ const RegisterPage = () => {
         </>
       }
     >
-      <form onSubmit={handleSubmit} noValidate className="space-y-5">
-        <FormField label="Full name" htmlFor="register-name" error={errors.name} required>
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <FormField label="Name" htmlFor="register-name" error={errors.name} required>
           {(field) => (
             <Input
               {...field}
               size="lg"
               autoComplete="name"
               leftIcon={<User />}
-              placeholder="e.g. Nusrat Jahan"
               value={form.name}
               onChange={update("name")}
             />
           )}
         </FormField>
 
-        <FormField label="Email address" htmlFor="register-email" error={errors.email} required>
+        <FormField label="Email" htmlFor="register-email" error={errors.email} required>
           {(field) => (
             <Input
               {...field}
@@ -156,13 +157,7 @@ const RegisterPage = () => {
           )}
         </FormField>
 
-        <FormField
-          label="Phone number"
-          htmlFor="register-phone"
-          error={errors.phone}
-          hint="For delivery updates"
-          required
-        >
+        <FormField label="Phone" htmlFor="register-phone" error={errors.phone} hint="For delivery updates" required>
           {(field) => (
             <Input
               {...field}
@@ -194,55 +189,29 @@ const RegisterPage = () => {
           )}
         </FormField>
 
-        <FormField label="Confirm password" htmlFor="register-confirmPassword" error={errors.confirmPassword} required>
-          {(field) => (
-            <PasswordField
-              {...field}
-              autoComplete="new-password"
-              placeholder="Re-enter your password"
-              value={form.confirmPassword}
-              onChange={update("confirmPassword")}
-            />
-          )}
-        </FormField>
-
-        <div>
-          <Checkbox
-            id="register-terms"
-            checked={agreed}
-            onChange={(event) => {
-              setAgreed(event.target.checked)
-              setErrors((prev) => ({ ...prev, terms: undefined }))
-            }}
-            label={
-              <>
-                I agree to the{" "}
-                <Link to="/terms" className="font-medium text-pink-600 underline-offset-2 hover:underline">
-                  Terms of Service
-                </Link>{" "}
-                and{" "}
-                <Link to="/privacy" className="font-medium text-pink-600 underline-offset-2 hover:underline">
-                  Privacy Policy
-                </Link>
-              </>
-            }
-          />
-          {errors.terms && (
-            <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">
-              {errors.terms}
-            </p>
-          )}
-        </div>
-
         <AuthError>{error}</AuthError>
 
-        <Button type="submit" size="lg" fullWidth loading={loading} loadingText="Creating account…">
-          Create account
-        </Button>
+        <div className="space-y-3">
+          <Button type="submit" size="lg" fullWidth loading={loading} loadingText="Creating account…">
+            Create account
+          </Button>
+
+          <p className="text-center text-xs leading-relaxed text-gray-500">
+            By creating an account you agree to our{" "}
+            <Link to="/terms" className="text-pink-600 underline-offset-2 hover:underline">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link to="/privacy" className="text-pink-600 underline-offset-2 hover:underline">
+              Privacy Policy
+            </Link>
+            .
+          </p>
+        </div>
       </form>
 
       {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
-        <div className="mt-6 space-y-4">
+        <div className="mt-5 space-y-4">
           <AuthDivider />
           <GoogleSignIn text="signup_with" onCredential={(credential) => dispatch(googleLogin(credential))} />
         </div>

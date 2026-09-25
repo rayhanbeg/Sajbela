@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
 
 import api from "../../lib/api"
 import { cn } from "../../lib/cn"
 import ProductCard from "../products/ProductCard"
-import { Button, ErrorState, IconButton, SectionHeader, SkeletonProductCard } from "../ui"
+import { ErrorState, SectionHeader, SkeletonProductCard } from "../ui"
 
 /**
  * One data-driven product section, used by New Arrivals / Combos / Best
@@ -12,16 +11,20 @@ import { Button, ErrorState, IconButton, SectionHeader, SkeletonProductCard } fr
  * fetch + skeleton + star-rendering + card markup; they're now thin configs.
  *
  * `layout`:
- *   "rail" — horizontal scroll-snap on mobile, grid from md up. Keeps a long
- *            home page from becoming an endless vertical scroll on phones.
+ *   "rail" — scroll-snap row on phones, plain grid from md up.
  *   "grid" — always a responsive grid.
  *
- * The rail uses native CSS scroll-snap rather than Swiper: it's real
- * scrollable content (so it works with a trackpad, a screen reader's
- * navigation and keyboard scrolling), and it ships no JavaScript.
+ * Why the rail stops at `md`: it used to stay a rail at every width, which
+ * meant desktop needed a pair of scroll arrows, a scroll-position listener and
+ * a resize listener just to make a horizontal row usable with a mouse. Above
+ * `md` there's room for a real grid, so the arrows and all their state are
+ * gone. Below `md` it's a native CSS scroll-snap row — no JavaScript, and it
+ * still works with a trackpad, keyboard and screen-reader navigation.
  */
 
-const GRID_CLASSES = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-6"
+const GRID_CLASSES = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5"
+
+const CARD_SIZES = "(max-width: 640px) 46vw, (max-width: 768px) 38vw, (max-width: 1024px) 31vw, 24vw"
 
 /** Endpoints return a bare array; a couple return { data: [...] }. Accept both. */
 function unwrap(payload) {
@@ -33,7 +36,6 @@ function unwrap(payload) {
 
 const ProductShowcase = ({
   endpoint,
-  eyebrow,
   title,
   description,
   actionLabel,
@@ -47,8 +49,6 @@ const ProductShowcase = ({
 }) => {
   const [products, setProducts] = useState([])
   const [status, setStatus] = useState("loading") // loading | ready | error
-  const railRef = useRef(null)
-  const [scroll, setScroll] = useState({ start: true, end: true })
 
   // Depend on a string, not the array — an inline `exclude={[id]}` would have a
   // new identity every render and re-fetch forever.
@@ -84,46 +84,24 @@ const ProductShowcase = ({
     return () => controller.abort()
   }, [load])
 
-  /** Tracks whether the arrows should be disabled at either end of the rail. */
-  const syncScroll = useCallback(() => {
-    const el = railRef.current
-    if (!el) return
-    const maxScroll = el.scrollWidth - el.clientWidth
-    setScroll({ start: el.scrollLeft <= 4, end: el.scrollLeft >= maxScroll - 4 })
-  }, [])
-
-  useEffect(() => {
-    if (layout !== "rail" || status !== "ready") return
-    syncScroll()
-    const el = railRef.current
-    if (!el) return
-    el.addEventListener("scroll", syncScroll, { passive: true })
-    window.addEventListener("resize", syncScroll)
-    return () => {
-      el.removeEventListener("scroll", syncScroll)
-      window.removeEventListener("resize", syncScroll)
-    }
-  }, [layout, status, products.length, syncScroll])
-
-  const nudge = (direction) => {
-    const el = railRef.current
-    if (!el) return
-    // Scroll by a bit less than a full viewport so the next card peeks in.
-    el.scrollBy({ left: direction * el.clientWidth * 0.85, behavior: "smooth" })
-  }
+  const header = (
+    <SectionHeader
+      title={title}
+      description={description}
+      align="left"
+      actionLabel={actionLabel}
+      actionTo={actionTo}
+    />
+  )
 
   // A failed section shouldn't wipe out the rest of the home page, but it also
   // shouldn't silently vanish the way the old components did — show a retry.
   if (status === "error") {
     return (
-      <section className={cn("py-10 md:py-14", className)}>
+      <section className={cn("py-8 md:py-12", className)}>
         <div className="page-container">
-          <SectionHeader eyebrow={eyebrow} title={title} description={description} align="left" />
-          <ErrorState
-            size="sm"
-            description={`We couldn't load ${title.toLowerCase()} right now.`}
-            onRetry={() => load()}
-          />
+          {header}
+          <ErrorState size="sm" description={`We couldn't load ${title.toLowerCase()}.`} onRetry={() => load()} />
         </div>
       </section>
     )
@@ -131,44 +109,10 @@ const ProductShowcase = ({
 
   if (status === "ready" && products.length === 0) return null
 
-  const showRail = layout === "rail"
-  const canScroll = showRail && products.length > 2
-
   return (
-    <section className={cn("py-10 md:py-14", className)}>
+    <section className={cn("py-8 md:py-12", className)}>
       <div className="page-container">
-        <div className="flex items-end justify-between gap-4">
-          <SectionHeader
-            eyebrow={eyebrow}
-            title={title}
-            description={description}
-            align="left"
-            className="flex-1"
-          />
-
-          {canScroll && (
-            // Margins mirror SectionHeader's own mb-6/md:mb-8 so the arrows
-            // sit on the same baseline as the heading block.
-            <div className="mb-6 hidden shrink-0 gap-2 md:mb-8 md:flex">
-              <IconButton
-                label={`Scroll ${title} left`}
-                variant="outline"
-                onClick={() => nudge(-1)}
-                disabled={scroll.start}
-              >
-                <ChevronLeft />
-              </IconButton>
-              <IconButton
-                label={`Scroll ${title} right`}
-                variant="outline"
-                onClick={() => nudge(1)}
-                disabled={scroll.end}
-              >
-                <ChevronRight />
-              </IconButton>
-            </div>
-          )}
-        </div>
+        {header}
 
         {status === "loading" ? (
           <div className={GRID_CLASSES} aria-hidden="true">
@@ -176,64 +120,38 @@ const ProductShowcase = ({
               <SkeletonProductCard key={i} />
             ))}
           </div>
-        ) : showRail ? (
-          <>
-            {/*
-              Mobile: negative margin + padding so cards bleed to the screen
-              edge while the first one still lines up with the page gutter.
-            */}
-            <ul
-              ref={railRef}
-              className={cn(
-                "-mx-4 flex snap-x-mandatory gap-3 overflow-x-auto scroll-smooth px-4 pb-2 scrollbar-hide",
-                "sm:gap-4",
-                "md:mx-0 md:px-0 md:pb-0",
-              )}
-            >
-              {products.map((product, index) => (
-                <li
-                  key={product._id}
-                  className="w-[46%] min-w-[9.5rem] shrink-0 snap-start-always sm:w-[38%] md:w-[31%] lg:w-[23.5%]"
-                >
-                  <ProductCard
-                    product={product}
-                    priority={priority && index === 0}
-                    sizes="(max-width: 640px) 46vw, (max-width: 1024px) 31vw, 24vw"
-                  />
-                </li>
-              ))}
-            </ul>
-
-            {actionLabel && actionTo && (
-              <div className="mt-7 text-center md:mt-9">
-                <Button to={actionTo} variant="outline" size="lg">
-                  {actionLabel}
-                </Button>
-              </div>
-            )}
-          </>
         ) : (
-          <>
-            <ul className={GRID_CLASSES}>
-              {products.map((product, index) => (
-                <li key={product._id}>
-                  <ProductCard
-                    product={product}
-                    priority={priority && index < 2}
-                    sizes="(max-width: 640px) 46vw, (max-width: 1024px) 31vw, 24vw"
-                  />
-                </li>
-              ))}
-            </ul>
-
-            {actionLabel && actionTo && (
-              <div className="mt-7 text-center md:mt-9">
-                <Button to={actionTo} variant="outline" size="lg">
-                  {actionLabel}
-                </Button>
-              </div>
+          <ul
+            className={cn(
+              layout === "rail"
+                ? [
+                    /*
+                      Phones: negative margin + matching padding so the cards
+                      bleed to the screen edge while the first one still lines
+                      up with the page gutter.
+                    */
+                    "-mx-4 flex snap-x-mandatory gap-3 overflow-x-auto scroll-smooth px-4 pb-2 scrollbar-hide",
+                    "sm:gap-4",
+                    // md+: drop out of the scroll container into a grid.
+                    "md:mx-0 md:grid md:grid-cols-3 md:gap-5 md:overflow-visible md:px-0 md:pb-0",
+                    "lg:grid-cols-4",
+                  ].join(" ")
+                : GRID_CLASSES,
             )}
-          </>
+          >
+            {products.map((product, index) => (
+              <li
+                key={product._id}
+                className={
+                  layout === "rail"
+                    ? "w-[46%] min-w-[10rem] shrink-0 snap-start-always sm:w-[38%] md:w-auto md:min-w-0"
+                    : undefined
+                }
+              >
+                <ProductCard product={product} priority={priority && index < 2} sizes={CARD_SIZES} />
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </section>

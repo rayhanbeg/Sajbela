@@ -76,7 +76,7 @@ const LoginPage = () => {
 
   return (
     <AuthLayout
-      title="Welcome back"
+      title="Sign in"
       notice={
         expired ? (
           <AuthNotice>Your session timed out.</AuthNotice>
@@ -86,18 +86,18 @@ const LoginPage = () => {
       }
       footer={
         <>
-          New to Sajbela?{" "}
+          No account?{" "}
           <Link
             to={registerHref}
             className="font-semibold text-pink-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
           >
-            Create an account
+            Sign up
           </Link>
         </>
       }
     >
-      <form onSubmit={handleSubmit} noValidate className="space-y-5">
-        <FormField label="Email address" htmlFor="login-email" error={errors.email} required>
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <FormField label="Email" htmlFor="login-email" error={errors.email} required>
           {(field) => (
             <Input
               {...field}
@@ -113,35 +113,32 @@ const LoginPage = () => {
           )}
         </FormField>
 
+        {/*
+          "Forgot password?" sits under the field rather than sharing a row
+          with the label. Sharing the row meant hand-rolling the label —
+          including its own required asterisk — so this field was the one
+          place on the site where the label markup didn't come from FormField.
+        */}
         <div>
-          <div className="mb-1.5 flex items-baseline justify-between gap-3">
-            <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">
-              Password
-              <span className="ml-0.5 text-red-500" aria-hidden="true">
-                *
-              </span>
-            </label>
-            <Link
-              to="/auth/forgot-password"
-              className="text-sm font-medium text-pink-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
-            >
-              Forgot password?
-            </Link>
-          </div>
-
-          {/* The label sits above so it can share a row with the reset link,
-              so FormField is used here for its error slot only. */}
-          <FormField htmlFor="login-password" error={errors.password}>
+          <FormField label="Password" htmlFor="login-password" error={errors.password} required>
             {(field) => (
               <PasswordField
                 {...field}
                 autoComplete="current-password"
-                placeholder="Your password"
                 value={form.password}
                 onChange={update("password")}
               />
             )}
           </FormField>
+
+          <div className="mt-1.5 text-right">
+            <Link
+              to="/auth/forgot-password"
+              className="text-sm text-pink-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
         </div>
 
         <AuthError>{error}</AuthError>
@@ -153,7 +150,7 @@ const LoginPage = () => {
 
       {/* Renders nothing until VITE_GOOGLE_CLIENT_ID is configured. */}
       {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
-        <div className="mt-6 space-y-4">
+        <div className="mt-5 space-y-4">
           <AuthDivider />
           <GoogleSignIn text="signin_with" onCredential={(credential) => dispatch(googleLogin(credential))} />
         </div>

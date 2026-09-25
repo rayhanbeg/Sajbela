@@ -28,13 +28,15 @@ export const SkeletonText = ({ lines = 3, className }) => (
   </div>
 )
 
-/** Product card placeholder — matches ProductCard's compact landscape image + 3 text rows. */
+/** Product card placeholder. Tracks ProductCard's square image + two title
+ *  lines + price row — if this drifts, load introduces the layout shift the
+ *  skeleton exists to prevent. */
 export const SkeletonProductCard = ({ className }) => (
   <div className={cn("overflow-hidden rounded-card border border-gray-100 bg-white shadow-card", className)}>
-    <Skeleton className="aspect-[4/3] w-full" rounded="rounded-none" />
-    <div className="space-y-2 p-2.5 sm:p-3">
+    <Skeleton className="aspect-square w-full" rounded="rounded-none" />
+    <div className="space-y-2 border-t border-gray-100 p-2.5 sm:p-3">
       <Skeleton className="h-4 w-full" rounded="rounded" />
-      <Skeleton className="h-3 w-1/2" rounded="rounded" />
+      <Skeleton className="h-4 w-2/3" rounded="rounded" />
       <Skeleton className="h-5 w-24" rounded="rounded" />
     </div>
   </div>
@@ -43,7 +45,7 @@ export const SkeletonProductCard = ({ className }) => (
 /** Grid of product placeholders matching the shop grid's column counts. */
 export const SkeletonProductGrid = ({ count = 12, className }) => (
   <div
-    className={cn("grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:gap-6 xl:grid-cols-4", className)}
+    className={cn("grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:gap-5 xl:grid-cols-4", className)}
     aria-hidden="true"
   >
     {Array.from({ length: count }).map((_, i) => (

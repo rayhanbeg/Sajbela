@@ -101,7 +101,11 @@ export const ordersAPI = {
 
 // Reviews API
 export const reviewsAPI = {
-  getProductReviews: (productId, params) => api.get(`/reviews/product/${productId}`, { params }),
+  // `config` carries an AbortSignal: ReviewsList refetches when the shopper
+  // follows a related-product link, and the in-flight request for the previous
+  // product has to be cancelled or its response can land last and win.
+  getProductReviews: (productId, params, config) =>
+    api.get(`/reviews/product/${productId}`, { params, ...config }),
   createReview: (reviewData) => api.post("/reviews", reviewData),
   updateReview: (id, reviewData) => api.put(`/reviews/${id}`, reviewData),
   deleteReview: (id) => api.delete(`/reviews/${id}`),
@@ -142,20 +146,27 @@ export const cartAPI = {
   clearCart: () => api.delete("/cart/clear"),
 }
 
-// Upload API - Fixed delete method
+// Upload API
+//
+// `kind` picks the Cloudinary preset server-side — see uploadController.
+// Banners must pass "banner" or they're capped at 800px like a product
+// thumbnail and the hero ends up upscaling them across the viewport.
+// Omitting it keeps the product preset.
 export const uploadAPI = {
-  single: (file) => {
+  single: (file, kind) => {
     const formData = new FormData()
     formData.append("image", file)
     return api.post("/upload/single", formData, {
       headers: { "Content-Type": "multipart/form-data" },
+      params: kind ? { kind } : undefined,
     })
   },
-  multiple: (files) => {
+  multiple: (files, kind) => {
     const formData = new FormData()
     files.forEach((file) => formData.append("images", file))
     return api.post("/upload/multiple", formData, {
       headers: { "Content-Type": "multipart/form-data" },
+      params: kind ? { kind } : undefined,
     })
   },
   delete: (publicId) => {

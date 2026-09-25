@@ -7,9 +7,8 @@ import ProductShowcase from "./ProductShowcase"
 const ComboSection = () => (
   <ProductShowcase
     endpoint="/products/combos/list"
-    eyebrow="Better together"
-    title="Special combos"
-    actionLabel="View all combos"
+    title="Combo sets"
+    actionLabel="View all"
     actionTo="/category/combo"
     layout="rail"
     className="bg-gray-50"

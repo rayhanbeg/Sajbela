@@ -28,14 +28,9 @@ const ICONS = {
 
 const CategorySection = () => {
   return (
-    <section className="bg-gray-50 py-10 md:py-14">
+    <section className="bg-gray-50 py-8 md:py-12">
       <div className="page-container">
-        <SectionHeader
-          eyebrow="Browse"
-          title="Shop by category"
-          actionLabel="View all products"
-          actionTo="/products"
-        />
+        <SectionHeader title="Shop by category" align="left" actionLabel="Shop all" actionTo="/products" />
 
         {/*
           Mobile is a snap rail rather than a grid: seven items in a 3- or
@@ -76,13 +71,8 @@ const CategorySection = () => {
                     <Icon className="h-5 w-5 md:h-6 md:w-6" strokeWidth={2} />
                   </span>
 
-                  <span className="text-xs font-semibold leading-tight text-gray-900 transition-colors group-hover:text-pink-600 md:text-sm">
+                  <span className="text-xs font-medium leading-tight text-gray-900 transition-colors group-hover:text-pink-600 md:text-sm">
                     {category.label}
-                  </span>
-
-                  {/* Taglines are extra context, not essential — hidden where space is tight. */}
-                  <span className="hidden text-[0.6875rem] leading-tight text-gray-500 lg:block">
-                    {category.tagline}
                   </span>
                 </Link>
               </li>

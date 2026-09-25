@@ -24,7 +24,6 @@ import {
   QuantityStepper,
   Rating,
   Skeleton,
-  SkeletonText,
   Tabs,
   getDiscount,
   useToast,
@@ -246,7 +245,7 @@ const ProductDetailPage = () => {
     },
     {
       id: "shipping",
-      label: "Shipping & returns",
+      label: "Delivery",
       content: <ShippingInfo />,
     },
     {
@@ -290,9 +289,12 @@ const ProductDetailPage = () => {
 
           {/* ── Buying panel ─────────────────────────────────── */}
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-pink-600">{label}</p>
-
-            <h1 className="mt-1.5 text-display-sm font-bold leading-tight text-gray-900">{product.name}</h1>
+            {/*
+              No category eyebrow above the title: the breadcrumb directly
+              above this column already reads Shop → Earrings → <name>, so an
+              uppercase "EARRINGS" line was the same word twice in 40px.
+            */}
+            <h1 className="text-display-sm font-bold leading-tight text-gray-900">{product.name}</h1>
 
             {(product.numReviews > 0 || product.rating > 0) && (
               <Rating
@@ -304,16 +306,16 @@ const ProductDetailPage = () => {
               />
             )}
 
-            <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            {/*
+              Price alone. It already strikes through the original and the
+              gallery carries a "N% off" badge, so the old "You save ৳x" line
+              next to it was the third statement of one fact. The truncated
+              two-line description that followed is gone too — it was the first
+              sentence of the Description tab, cut mid-word.
+            */}
+            <div className="mt-4">
               <Price price={product.price} originalPrice={product.originalPrice} size="xl" />
-              {discount && (
-                <span className="text-sm font-medium text-green-700">
-                  You save {formatPrice(discount.amount)}
-                </span>
-              )}
             </div>
-
-            <p className="mt-4 line-clamp-2 text-sm leading-relaxed text-gray-600">{product.description}</p>
 
             {/* ── Variants ───────────────────────────────────── */}
             {(requiresColor || requiresSize) && (
@@ -402,9 +404,8 @@ const ProductDetailPage = () => {
         // follow a related link into a different category.
         key={product._id}
         endpoint={`/products?category=${product.category}&limit=10`}
-        eyebrow="You might also like"
         title={`More ${label.toLowerCase()}`}
-        actionLabel={`Shop all ${label.toLowerCase()}`}
+        actionLabel="View all"
         actionTo={categoryPath(product.category)}
         exclude={product._id}
         layout="rail"
@@ -507,30 +508,22 @@ const Specifications = ({ product }) => {
   )
 }
 
+/** One flat list — the two `h3` column headings it used to have were labelling
+ *  four-line lists inside a tab that's already labelled "Delivery". */
 const ShippingInfo = () => (
-  <div className="grid max-w-3xl gap-6 sm:grid-cols-2">
-    <div>
-      <h3 className="text-sm font-semibold text-gray-900">Delivery</h3>
-      <ul className="mt-2 space-y-1.5 text-sm text-gray-600">
-        <li>Inside Dhaka — {formatPrice(SHIPPING.insideDhaka)}, 1–2 days.</li>
-        <li>Outside Dhaka — {formatPrice(SHIPPING.outsideDhaka)}, 2–4 days.</li>
-        <li>Free over {formatPrice(SHIPPING.freeThreshold)}.</li>
-        <li>Cash on delivery nationwide.</li>
-      </ul>
-    </div>
+  <div className="max-w-2xl">
+    <ul className="space-y-2 text-sm text-gray-600">
+      <li>Inside Dhaka — {formatPrice(SHIPPING.insideDhaka)}, 1–2 days.</li>
+      <li>Outside Dhaka — {formatPrice(SHIPPING.outsideDhaka)}, 2–4 days.</li>
+      <li>Free over {formatPrice(SHIPPING.freeThreshold)}.</li>
+      <li>Cash on delivery nationwide.</li>
+      <li>Check your parcel with the rider — damaged or wrong items are replaced free.</li>
+      <li>Report an issue within 3 days. Cosmetics returnable unopened only.</li>
+    </ul>
 
-    <div>
-      <h3 className="text-sm font-semibold text-gray-900">Returns</h3>
-      <ul className="mt-2 space-y-1.5 text-sm text-gray-600">
-        <li>Check your parcel with the rider.</li>
-        <li>Damaged or wrong items replaced free.</li>
-        <li>Report an issue within 3 days.</li>
-        <li>Cosmetics returnable unopened only.</li>
-      </ul>
-      <Button to="/returns" variant="ghost-brand" size="sm" className="mt-3 -ml-3">
-        Full policy
-      </Button>
-    </div>
+    <Button to="/returns" variant="ghost-brand" size="sm" className="mt-3 -ml-3">
+      Full policy
+    </Button>
   </div>
 )
 
@@ -547,13 +540,15 @@ const ProductDetailSkeleton = () => (
           </div>
         </div>
 
+        {/* Mirrors the real buying panel: title, rating, price, variants,
+            quantity, two buttons. Nothing for an eyebrow or a description
+            blurb any more, so the panel doesn't shift when data lands. */}
         <div className="space-y-5">
-          <Skeleton className="h-3 w-20" />
           <Skeleton className="h-8 w-3/4" />
           <Skeleton className="h-4 w-32" />
           <Skeleton className="h-9 w-40" />
-          <SkeletonText lines={3} />
           <Skeleton className="h-11 w-full rounded-lg" />
+          <Skeleton className="h-10 w-44 rounded-lg" />
           <div className="flex gap-2.5">
             <Skeleton className="h-12 flex-1 rounded-lg" />
             <Skeleton className="h-12 flex-1 rounded-lg" />

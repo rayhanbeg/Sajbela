@@ -1,154 +1,120 @@
 import { cloudinary, upload } from "../config/cloudinary.js"
 import fs from "fs"
 
+/**
+ * Per-kind Cloudinary presets, chosen with `?kind=` on the upload request.
+ *
+ * Every image used to go through one `800x800 c_limit` — hero banners included.
+ * A banner spans the full viewport, so on a 1440px screen the browser was
+ * upscaling an 800px-wide file, which is why the hero looked soft no matter
+ * what `srcset` the front end asked for: the detail was already gone.
+ *
+ * Products stay at 800x800. The largest a product image is ever displayed is
+ * the PDP gallery at roughly 600px, and a square cap suits square product
+ * shots. An unknown `kind` falls back to the product preset, so existing
+ * callers that send no kind behave exactly as before.
+ */
+const PRESETS = {
+  product: {
+    folder: "sajbela-products",
+    transformation: [{ width: 800, height: 800, crop: "limit" }, { quality: "auto" }, { format: "auto" }],
+  },
+  banner: {
+    folder: "sajbela-banners",
+    // Width only — a banner's height follows from the ratio it was designed
+    // at, and capping both dimensions would crop the design.
+    transformation: [{ width: 2000, crop: "limit" }, { quality: "auto" }, { format: "auto" }],
+  },
+}
+
+const presetFor = (kind) => PRESETS[kind] || PRESETS.product
+
+/** Drop the multer temp file. A failure here must not mask the real error. */
+const cleanUp = (filePath) => {
+  try {
+    if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath)
+  } catch (error) {
+    console.error("Could not remove temp upload:", error.message)
+  }
+}
+
+const cloudinaryConfigured = () =>
+  Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)
+
+/** Turn a Cloudinary SDK error into something an admin can act on. */
+const uploadErrorMessage = (error) => {
+  const message = error?.message || ""
+  if (message.includes("Invalid API Key")) return "Cloudinary configuration error - invalid API key"
+  if (message.includes("Invalid API Secret")) return "Cloudinary configuration error - invalid API secret"
+  if (message.includes("cloud name")) return "Cloudinary configuration error - invalid cloud name"
+  if (message.includes("File size too large")) return "That image is too large - try one under 5MB"
+  return message ? `Upload failed: ${message}` : "Server error uploading image"
+}
+
 // Upload single image
 export const uploadSingle = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "No file uploaded" })
+  }
+
+  if (!cloudinaryConfigured()) {
+    cleanUp(req.file.path)
+    return res.status(500).json({
+      success: false,
+      message: "Server configuration error - Cloudinary is not configured",
+    })
+  }
+
   try {
-    console.log("📤 Upload request received")
-    console.log("📋 Request details:", {
-      hasFile: !!req.file,
-      fileSize: req.file?.size,
-      fileName: req.file?.originalname,
-      mimetype: req.file?.mimetype,
-    })
-
-    if (!req.file) {
-      console.log("❌ No file in request")
-      return res.status(400).json({ message: "No file uploaded" })
-    }
-
-    console.log("📁 File details:", {
-      filename: req.file.filename,
-      path: req.file.path,
-      size: req.file.size,
-    })
-
-    console.log("☁️ Uploading to Cloudinary...")
-
-    // Check if Cloudinary is configured
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      console.error("❌ Cloudinary not configured properly")
-      return res.status(500).json({
-        success: false,
-        message: "Server configuration error - Cloudinary not configured",
-        error: "Missing Cloudinary credentials",
-      })
-    }
-
-    // Upload to Cloudinary using the configured instance
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: "sajbela-products",
-      transformation: [{ width: 800, height: 800, crop: "limit" }, { quality: "auto" }, { format: "auto" }],
-    })
-
-    console.log("✅ Cloudinary upload successful:", {
-      url: result.secure_url,
-      publicId: result.public_id,
-    })
-
-    // Delete local file
-    if (fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path)
-      console.log("🗑️ Local file deleted")
-    }
+    const result = await cloudinary.uploader.upload(req.file.path, presetFor(req.query.kind))
 
     res.json({
       success: true,
       message: "Image uploaded successfully",
       imageUrl: result.secure_url,
       publicId: result.public_id,
-      url: result.secure_url, // For backward compatibility
+      width: result.width,
+      height: result.height,
+      url: result.secure_url, // Back-compat: older admin code reads `url`.
     })
   } catch (error) {
-    console.error("❌ Upload error details:")
-    console.error("Error message:", error.message)
-    console.error("Error code:", error.http_code || error.code)
-    console.error("Full error:", error)
-
-    // Clean up local file if it exists
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path)
-      console.log("🗑️ Local file cleaned up after error")
-    }
-
-    // Send detailed error response
-    let errorMessage = "Server error uploading image"
-
-    if (error.message && error.message.includes("Invalid API Key")) {
-      errorMessage = "Cloudinary configuration error - Invalid API Key"
-    } else if (error.message && error.message.includes("Invalid API Secret")) {
-      errorMessage = "Cloudinary configuration error - Invalid API Secret"
-    } else if (error.message && error.message.includes("cloud name")) {
-      errorMessage = "Cloudinary configuration error - Invalid Cloud Name"
-    } else if (error.message) {
-      errorMessage = `Upload failed: ${error.message}`
-    }
-
-    res.status(500).json({
-      success: false,
-      message: errorMessage,
-      error: error.message || "Unknown error",
-      details: {
-        code: error.http_code || error.code || "No code",
-        name: error.name || "Unknown error type",
-      },
-    })
+    console.error("Upload error:", error.message)
+    res.status(500).json({ success: false, message: uploadErrorMessage(error) })
+  } finally {
+    cleanUp(req.file.path)
   }
 }
 
 // Upload multiple images
 export const uploadMultiple = async (req, res) => {
-  try {
-    console.log("📤 Multiple upload request received")
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ success: false, message: "No files uploaded" })
+  }
 
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "No files uploaded" })
-    }
-
-    console.log(`📁 Processing ${req.files.length} files`)
-
-    const uploadPromises = req.files.map(async (file) => {
-      const result = await cloudinary.uploader.upload(file.path, {
-        folder: "sajbela-products",
-        transformation: [{ width: 800, height: 800, crop: "limit" }, { quality: "auto" }, { format: "auto" }],
-      })
-
-      // Delete local file
-      if (fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path)
-      }
-
-      return {
-        imageUrl: result.secure_url,
-        publicId: result.public_id,
-      }
-    })
-
-    const results = await Promise.all(uploadPromises)
-    console.log(`✅ ${results.length} images uploaded successfully`)
-
-    res.json({
-      success: true,
-      message: "Images uploaded successfully",
-      images: results,
-    })
-  } catch (error) {
-    console.error("❌ Multiple upload error:", error)
-
-    // Clean up local files
-    if (req.files) {
-      req.files.forEach((file) => {
-        if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path)
-        }
-      })
-    }
-
-    res.status(500).json({
+  if (!cloudinaryConfigured()) {
+    req.files.forEach((file) => cleanUp(file.path))
+    return res.status(500).json({
       success: false,
-      message: "Server error uploading images",
-      error: error.message,
+      message: "Server configuration error - Cloudinary is not configured",
     })
+  }
+
+  const preset = presetFor(req.query.kind)
+
+  try {
+    const images = await Promise.all(
+      req.files.map(async (file) => {
+        const result = await cloudinary.uploader.upload(file.path, preset)
+        return { imageUrl: result.secure_url, publicId: result.public_id }
+      }),
+    )
+
+    res.json({ success: true, message: "Images uploaded successfully", images })
+  } catch (error) {
+    console.error("Multiple upload error:", error.message)
+    res.status(500).json({ success: false, message: uploadErrorMessage(error) })
+  } finally {
+    req.files.forEach((file) => cleanUp(file.path))
   }
 }
 
@@ -158,25 +124,15 @@ export const deleteImage = async (req, res) => {
     const { publicId } = req.body
 
     if (!publicId) {
-      return res.status(400).json({ message: "Public ID is required" })
+      return res.status(400).json({ success: false, message: "Public ID is required" })
     }
 
-    console.log("🗑️ Deleting image:", publicId)
-
     await cloudinary.uploader.destroy(publicId)
-    console.log("✅ Image deleted successfully")
 
-    res.json({
-      success: true,
-      message: "Image deleted successfully",
-    })
+    res.json({ success: true, message: "Image deleted successfully" })
   } catch (error) {
-    console.error("❌ Delete image error:", error)
-    res.status(500).json({
-      success: false,
-      message: "Server error deleting image",
-      error: error.message,
-    })
+    console.error("Delete image error:", error.message)
+    res.status(500).json({ success: false, message: "Server error deleting image" })
   }
 }
 

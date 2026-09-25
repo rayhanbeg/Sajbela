@@ -7,9 +7,8 @@ import ProductShowcase from "./ProductShowcase"
 const NewArrivals = () => (
   <ProductShowcase
     endpoint="/products/new-arrivals/list"
-    eyebrow="Just in"
     title="New arrivals"
-    actionLabel="View all new arrivals"
+    actionLabel="View all"
     actionTo="/products?section=new-arrivals"
     layout="rail"
     className="bg-white"

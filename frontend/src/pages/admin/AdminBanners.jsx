@@ -48,7 +48,8 @@ const AdminBanners = () => {
     if (!file) return
     setUploading(true)
     try {
-      const { data } = await uploadAPI.single(file)
+      // "banner" preset: 2000px wide, not the 800px product cap.
+      const { data } = await uploadAPI.single(file, "banner")
       setForm((current) => ({ ...current, imageUrl: data.imageUrl || data.url, publicId: data.publicId || "" }))
       toast.success("Banner image uploaded")
     } catch (error) {
@@ -118,7 +119,7 @@ const AdminBanners = () => {
       <Panel title={editingId ? "Edit banner" : "New banner"} description="Image is required. The button fields are optional.">
         <form onSubmit={save} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="space-y-4">
-            <FormField label="Banner image" required>
+            <FormField label="Banner image" hint="2400 × 1000 works best. Anything narrower than 3:2 gets cropped on phones." required>
               <div className="flex flex-wrap items-center gap-3">
                 <Button type="button" variant="outline" loading={uploading} onClick={() => fileInputRef.current?.click()} leftIcon={<ImagePlus className="h-4 w-4" />}>Upload image</Button>
                 {form.imageUrl && <span className="text-sm text-green-700">Image ready</span>}
@@ -143,7 +144,9 @@ const AdminBanners = () => {
               <Button type="submit" loading={saving}>{editingId ? "Save changes" : "Create banner"}</Button>
             </div>
           </div>
-          <div className="aspect-[16/9] overflow-hidden rounded-card border border-dashed border-gray-300 bg-gray-50">
+          {/* 21/9 matches the hero's desktop frame, so the preview crops the
+              way the live homepage will. See components/home/HeroSection. */}
+          <div className="aspect-[21/9] overflow-hidden rounded-card border border-dashed border-gray-300 bg-gray-50">
             {form.imageUrl ? <img src={form.imageUrl} alt="Banner preview" className="h-full w-full object-cover" /> : <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-sm text-gray-500"><Image className="h-7 w-7 text-gray-400" />Upload an image to preview it here.</div>}
           </div>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={uploadImage} className="sr-only" />

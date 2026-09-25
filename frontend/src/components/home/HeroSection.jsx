@@ -9,6 +9,33 @@ import { Button, Image, Skeleton } from "../ui"
 import "swiper/css"
 import "swiper/css/pagination"
 
+/**
+ * Homepage banners, managed in Admin → Banners.
+ *
+ * Aspect ratio note. One uploaded image has to look right on a 375px phone and
+ * a 1920px monitor, and `object-cover` crops whatever doesn't fit, so the frame
+ * ratios matter more than anything else here.
+ *
+ * The rule: a container **narrower** than the image crops it horizontally, a
+ * container **wider** than the image crops it vertically. Banner content is
+ * laid out horizontally — product on one side, price and CTA on the other — so
+ * a horizontal crop cuts the message in half while a vertical one only trims
+ * empty margin off the top and bottom. The ratios below therefore only ever get
+ * *wider* as the viewport grows: 1.5 → 2.33 → 3.0.
+ *
+ * That's also why there's no height cap any more. Capping the height of an
+ * aspect box silently replaces the declared ratio with `viewport ÷ cap`, and
+ * the old 16/9-with-a-512px-ceiling bound at about 910px wide — so a 1440px
+ * desktop was really rendering a 2.81 box and cropping about a third off the
+ * banner's height. The ratio is now always the ratio, which also means zero
+ * layout shift, since the skeleton reserves exactly the same box.
+ *
+ * Upload target: 2400 × 1000 or anything wider than 3:2. Narrower than 3:2 and
+ * phones start losing the left and right edges.
+ */
+
+const FRAME = "aspect-[3/2] w-full md:aspect-[21/9] 2xl:aspect-[3/1]"
+
 const PAGINATION_STYLES = [
   "[&_.swiper-pagination]:!bottom-3",
   "[&_.swiper-pagination-bullet]:!h-2",
@@ -22,7 +49,6 @@ const PAGINATION_STYLES = [
   "[&_.swiper-pagination-bullet-active]:!opacity-100",
 ].join(" ")
 
-/** Homepage banners are managed entirely in Admin → Banners. */
 const HeroSection = () => {
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)")
   const [banners, setBanners] = useState([])
@@ -34,7 +60,9 @@ const HeroSection = () => {
       .get("/banners", { signal: controller.signal })
       .then(({ data }) => setBanners(Array.isArray(data?.banners) ? data.banners : []))
       .catch((error) => {
-        if (error?.code !== "ERR_CANCELED" && error?.name !== "CanceledError") console.error("Could not load banners:", error)
+        if (error?.code !== "ERR_CANCELED" && error?.name !== "CanceledError") {
+          console.error("Could not load banners:", error)
+        }
       })
       .finally(() => setLoading(false))
     return () => controller.abort()
@@ -42,46 +70,77 @@ const HeroSection = () => {
 
   if (loading) {
     return (
-      <section aria-label="Loading featured offers" className="w-full">
-        <Skeleton className="aspect-[4/3] w-full sm:aspect-[16/10] lg:aspect-[16/9]" rounded="rounded-none" />
+      <section aria-label="Loading featured offers">
+        <Skeleton className={FRAME} rounded="rounded-none" />
       </section>
     )
   }
 
   if (banners.length === 0) return null
 
-  return (
-    <section aria-label="Featured offers" className="w-full">
-      <div className={"relative w-full overflow-hidden " + PAGINATION_STYLES}>
-          <Swiper
-            modules={[Autoplay, Pagination, Keyboard, A11y]}
-            slidesPerView={1}
-            spaceBetween={0}
-            loop={banners.length > 1}
-            keyboard={{ enabled: true }}
-            autoplay={reducedMotion || banners.length < 2 ? false : { delay: 4500, disableOnInteraction: false }}
-            pagination={banners.length > 1 ? { clickable: true } : false}
-            a11y={{ prevSlideMessage: "Previous banner", nextSlideMessage: "Next banner" }}
-            className="aspect-[4/3] w-full sm:aspect-[16/10] lg:aspect-[16/9]"
-          >
-            {banners.map((banner, index) => {
-              const hasButton = Boolean(banner.buttonLabel && banner.buttonUrl)
-              const buttonProps = banner.buttonUrl?.startsWith("/") ? { to: banner.buttonUrl } : { href: banner.buttonUrl }
+  const multiple = banners.length > 1
 
-              return (
-                <SwiperSlide key={banner._id}>
-                  <div className="relative h-full w-full">
-                    <Image src={banner.imageUrl} alt="Sajbela banner" aspect="auto" priority={index === 0} sizes="100vw" className="h-full w-full" imgClassName="object-cover" />
-                    {hasButton && (
-                      <div className="absolute inset-x-0 bottom-7 flex justify-center px-4 sm:bottom-9">
-                        <Button {...buttonProps} size="md" className="shadow-lg">{banner.buttonLabel}</Button>
+  return (
+    <section aria-label="Featured offers">
+      <div className={`relative overflow-hidden bg-gray-100 ${PAGINATION_STYLES}`}>
+        <Swiper
+          modules={[Autoplay, Pagination, Keyboard, A11y]}
+          slidesPerView={1}
+          spaceBetween={0}
+          loop={multiple}
+          keyboard={{ enabled: true }}
+          autoplay={reducedMotion || !multiple ? false : { delay: 4500, disableOnInteraction: false }}
+          pagination={multiple ? { clickable: true } : false}
+          a11y={{ prevSlideMessage: "Previous banner", nextSlideMessage: "Next banner" }}
+          className={FRAME}
+        >
+          {banners.map((banner, index) => {
+            const hasButton = Boolean(banner.buttonLabel && banner.buttonUrl)
+            const buttonProps = banner.buttonUrl?.startsWith("/")
+              ? { to: banner.buttonUrl }
+              : { href: banner.buttonUrl }
+
+            return (
+              <SwiperSlide key={banner._id}>
+                <div className="relative h-full w-full">
+                  <Image
+                    src={banner.imageUrl}
+                    alt=""
+                    aspect="auto"
+                    /* The first banner is the LCP element on the home page. */
+                    priority={index === 0}
+                    /* Without an explicit width the fallback src was 800px wide
+                       and visibly soft on anything larger than a tablet. */
+                    width={1920}
+                    sizes="100vw"
+                    className="h-full w-full"
+                    imgClassName="object-cover object-center"
+                  />
+
+                  {hasButton && (
+                    <>
+                      {/* Scrim: the CTA has to stay legible over a banner we
+                          don't control the brightness of. */}
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/35 to-transparent"
+                      />
+                      <div
+                        className={`absolute inset-x-0 flex justify-center px-4 ${
+                          multiple ? "bottom-9 sm:bottom-11" : "bottom-5 sm:bottom-8"
+                        }`}
+                      >
+                        <Button {...buttonProps} size="md" className="shadow-lg">
+                          {banner.buttonLabel}
+                        </Button>
                       </div>
-                    )}
-                  </div>
-                </SwiperSlide>
-              )
-            })}
-          </Swiper>
+                    </>
+                  )}
+                </div>
+              </SwiperSlide>
+            )
+          })}
+        </Swiper>
       </div>
     </section>
   )

@@ -98,14 +98,23 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
         className,
       )}
     >
-      <div className="relative overflow-hidden bg-gray-50">
+      {/*
+        Square frame, not 4/3 landscape. Product photos are uploaded through a
+        Cloudinary `c_limit` at 800x800, so they arrive square or portrait —
+        inside a landscape box `object-contain` left a wide grey band down each
+        side and the card came out short and mostly empty. Square also means
+        every card in a grid has an identical image height, so the titles and
+        price rows line up across the row without a subgrid.
+      */}
+      <div className="relative overflow-hidden">
         <Image
           src={primaryImage}
           alt={product.name}
-          aspect="landscape"
+          aspect="square"
           priority={priority}
           sizes={sizes}
           fit="contain"
+          background="bg-white"
           imgClassName={cn(
             "transition-transform duration-500 ease-out-expo group-hover:scale-105",
             secondImage && hovered && "opacity-0",
@@ -121,9 +130,10 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
             src={secondImage}
             alt=""
             aria-hidden="true"
-            aspect="landscape"
+            aspect="square"
             sizes={sizes}
             fit="contain"
+            background="bg-white"
             className={cn(
               "absolute inset-0 transition-opacity duration-500 ease-in-out-smooth",
               hovered ? "opacity-100" : "opacity-0",
@@ -159,8 +169,8 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-1 p-2.5 sm:p-3">
-        <h3 className="text-sm font-semibold leading-snug text-gray-900 md:text-[0.9375rem]">
+      <div className="flex flex-1 flex-col gap-1 border-t border-gray-100 p-2.5 sm:p-3">
+        <h3 className="text-sm font-medium leading-snug text-gray-900">
           <Link
             to={href}
             className={cn(
@@ -198,7 +208,9 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
                   : `Add ${product.name} to cart`
             }
             className={cn(
-              "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
+              // 40px, not the old 36px — this is the only tap target on the
+              // card that isn't the full-card stretched link.
+              "relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
               available
                 ? "bg-pink-600 text-white hover:bg-pink-700 active:scale-95"

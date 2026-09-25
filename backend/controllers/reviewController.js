@@ -26,11 +26,18 @@ export const getProductReviews = async (req, res) => {
 
     res.json({
       reviews,
+      // Matches the pagination shape every other controller returns
+      // (products, orders, users). This one used to return { page, limit,
+      // total, pages }, so the storefront's `pagination.hasNext` check was
+      // permanently undefined and the "Load more" button never rendered —
+      // any review past the first five was unreachable in the UI.
       pagination: {
-        page,
-        limit,
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
         total,
-        pages: Math.ceil(total / limit),
+        limit,
+        hasNext: skip + limit < total,
+        hasPrev: page > 1,
       },
     })
   } catch (error) {

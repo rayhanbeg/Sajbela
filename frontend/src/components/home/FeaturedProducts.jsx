@@ -11,9 +11,8 @@ import ProductShowcase from "./ProductShowcase"
 const FeaturedProducts = () => (
   <ProductShowcase
     endpoint="/products/featured/list"
-    eyebrow="Loved by customers"
     title="Best sellers"
-    actionLabel="Shop all products"
+    actionLabel="Shop all"
     actionTo="/products"
     layout="grid"
     limit={8}

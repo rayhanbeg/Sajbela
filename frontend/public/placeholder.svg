@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="No image available">
+  <!--
+    Fallback for products with no photo. lib/cloudinary.js has pointed
+    PLACEHOLDER_IMAGE at /placeholder.svg since the start, but there was no
+    public/ directory, so every missing product image resolved to a 404 and
+    rendered as the browser's broken-image glyph inside an otherwise finished
+    card. Colours are gray-100/gray-200/gray-400 from the locked palette.
+  -->
+  <rect width="400" height="400" fill="#f3f4f6"/>
+  <g fill="none" stroke="#9ca3af" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="112" y="128" width="176" height="144" rx="14"/>
+    <circle cx="160" cy="176" r="16"/>
+    <path d="M112 236l48-44 44 40 32-28 52 48"/>
+  </g>
+  <rect x="112" y="128" width="176" height="144" rx="14" fill="#e5e7eb" opacity="0.45"/>
+</svg>

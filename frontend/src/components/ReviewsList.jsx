@@ -1,132 +1,163 @@
-import { useState, useEffect } from "react"
-import { Star, ThumbsUp, Camera } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import { Camera, MessageSquare } from "lucide-react"
+
 import { reviewsAPI } from "../lib/api"
+import { formatDate } from "../lib/utils"
+import { Badge, Button, EmptyState, ErrorState, Image, Rating, Skeleton } from "./ui"
+
+/**
+ * Reviews for one product, rendered inside the PDP's Reviews tab.
+ *
+ * This component predated the redesign and was the last storefront view still
+ * building everything by hand. Fixed here:
+ *
+ *  - "Load More Reviews" called `setReviews(response.data.reviews)`, replacing
+ *    the list instead of appending. Clicking it showed reviews 6–10 and threw
+ *    away 1–5, with no way back except a reload. It appends now.
+ *  - The "Helpful (0)" button had no onClick and there is no helpful/vote
+ *    route in backend/routes/reviews.js, so it could never do anything. Gone,
+ *    like the "Remember me" checkbox on the sign-in form.
+ *  - A failed fetch only hit console.error and then rendered "No reviews yet",
+ *    telling shoppers a product had no reviews when the request had failed.
+ *  - Its own five-star loop, skeleton, green badge and date formatter are now
+ *    Rating / Skeleton / Badge / lib/utils.formatDate, so stars, dates and
+ *    badges match the rest of the site.
+ *  - Review photos went through a raw <img> with no lazy loading and no
+ *    srcset; full-size uploads were downloaded to fill an 80px thumbnail.
+ *  - There's no "Customer Reviews (n)" heading any more — the tab that owns
+ *    this panel is already labelled "Reviews" and carries the same count.
+ */
+
+const PAGE_SIZE = 5
 
 const ReviewsList = ({ productId }) => {
   const [reviews, setReviews] = useState([])
-  const [loading, setLoading] = useState(true)
   const [pagination, setPagination] = useState({})
+  const [status, setStatus] = useState("loading") // loading | ready | error
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const fetchPage = useCallback(
+    async (page, { append = false, signal } = {}) => {
+      if (append) setLoadingMore(true)
+      else setStatus("loading")
+
+      try {
+        const { data } = await reviewsAPI.getProductReviews(productId, { page, limit: PAGE_SIZE }, { signal })
+        const incoming = data.reviews || []
+
+        // Append, don't replace — see the note above.
+        setReviews((prev) => (append ? [...prev, ...incoming] : incoming))
+        setPagination(data.pagination || {})
+        setStatus("ready")
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED" || error?.name === "CanceledError") return
+        console.error("Fetch reviews error:", error)
+        // A failed "load more" keeps the reviews already on screen.
+        if (!append) setStatus("error")
+      } finally {
+        setLoadingMore(false)
+      }
+    },
+    [productId],
+  )
 
   useEffect(() => {
-    fetchReviews()
-  }, [productId])
+    const controller = new AbortController()
+    setReviews([])
+    fetchPage(1, { signal: controller.signal })
+    return () => controller.abort()
+  }, [fetchPage])
 
-  const fetchReviews = async (page = 1) => {
-    try {
-      setLoading(true)
-      const response = await reviewsAPI.getProductReviews(productId, { page, limit: 5 })
-      setReviews(response.data.reviews)
-      setPagination(response.data.pagination)
-    } catch (error) {
-      console.error("Fetch reviews error:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const renderStars = (rating) => {
-    return [...Array(5)].map((_, i) => (
-      <Star key={i} className={`h-4 w-4 ${i < rating ? "text-yellow-400 fill-current" : "text-gray-300"}`} />
-    ))
-  }
-
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
-  }
-
-  if (loading) {
+  if (status === "loading") {
     return (
-      <div className="space-y-4">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="border border-gray-200 rounded-lg p-4 animate-pulse">
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="h-4 bg-gray-200 rounded w-20"></div>
-              <div className="h-4 bg-gray-200 rounded w-16"></div>
-            </div>
-            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-            <div className="h-16 bg-gray-200 rounded"></div>
+      <div className="space-y-4" aria-hidden="true">
+        {[0, 1, 2].map((row) => (
+          <div key={row} className="rounded-card border border-gray-100 p-4 sm:p-5">
+            <Skeleton className="h-4 w-28" rounded="rounded" />
+            <Skeleton className="mt-2.5 h-3 w-40" rounded="rounded" />
+            <Skeleton className="mt-3.5 h-3.5 w-full" rounded="rounded" />
+            <Skeleton className="mt-2 h-3.5 w-3/4" rounded="rounded" />
           </div>
         ))}
       </div>
     )
+  }
+
+  if (status === "error") {
+    return <ErrorState size="sm" description="We couldn't load the reviews." onRetry={() => fetchPage(1)} />
   }
 
   if (reviews.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-gray-500">No reviews yet. Be the first to review this product!</p>
-      </div>
-    )
+    return <EmptyState icon={<MessageSquare />} title="No reviews yet" description="Be the first to review this." size="sm" />
   }
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-xl font-semibold text-gray-900">Customer Reviews ({pagination.total})</h3>
-
-      <div className="space-y-4">
+    <div className="space-y-4">
+      <ul className="space-y-4">
         {reviews.map((review) => (
-          <div key={review._id} className="border border-gray-200 rounded-lg p-6">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="flex items-center space-x-2 mb-1">
-                  <div className="flex">{renderStars(review.rating)}</div>
-                  {review.isVerified && (
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Verified Purchase</span>
-                  )}
-                </div>
-                <p className="text-sm text-gray-600">
-                  By {review.user?.name || "Anonymous"} • {formatDate(review.createdAt)}
-                </p>
-              </div>
+          <li key={review._id} className="rounded-card border border-gray-100 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+              <Rating value={review.rating} size="sm" showCount={false} />
+              {review.isVerified && (
+                <Badge tone="success" size="sm">
+                  Verified purchase
+                </Badge>
+              )}
             </div>
 
-            {review.title && <h4 className="font-semibold text-gray-900 mb-2">{review.title}</h4>}
+            <p className="mt-1.5 text-xs text-gray-500">
+              {review.user?.name || "Anonymous"} · {formatDate(review.createdAt)}
+            </p>
 
-            {review.comment && <p className="text-gray-700 mb-3">{review.comment}</p>}
+            {review.title && <p className="mt-2.5 font-medium text-gray-900">{review.title}</p>}
 
-            {review.images && review.images.length > 0 && (
-              <div className="mb-3">
-                <div className="flex items-center mb-2">
-                  <Camera className="h-4 w-4 mr-1 text-gray-500" />
-                  <span className="text-sm text-gray-600">Customer Photos</span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {review.images.map((image, index) => (
-                    <img
-                      key={index}
-                      src={image || "/placeholder.svg"}
-                      alt={`Review ${index + 1}`}
-                      className="w-full h-20 object-cover rounded border cursor-pointer hover:opacity-80"
-                      onClick={() => window.open(image, "_blank")}
-                    />
-                  ))}
-                </div>
-              </div>
+            {review.comment && (
+              <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-gray-700">{review.comment}</p>
             )}
 
-            <div className="flex items-center justify-between text-sm text-gray-500">
-              <button className="flex items-center space-x-1 hover:text-pink-600">
-                <ThumbsUp className="h-4 w-4" />
-                <span>Helpful ({review.helpfulCount || 0})</span>
-              </button>
-            </div>
-          </div>
+            {review.images?.length > 0 && (
+              <div className="mt-3">
+                <p className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <Camera aria-hidden="true" className="h-3.5 w-3.5" />
+                  Customer photos
+                </p>
+
+                <ul className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                  {review.images.map((image, index) => (
+                    <li key={`${review._id}-${index}`}>
+                      <a
+                        href={image}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block rounded-lg transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2"
+                      >
+                        <Image
+                          src={image}
+                          alt={`Photo ${index + 1} from this review`}
+                          aspect="square"
+                          width={200}
+                          sizes="(max-width: 640px) 22vw, 120px"
+                          rounded="rounded-lg"
+                        />
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </li>
         ))}
-      </div>
+      </ul>
 
       {pagination.hasNext && (
-        <div className="text-center">
-          <button
-            onClick={() => fetchReviews(pagination.currentPage + 1)}
-            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-          >
-            Load More Reviews
-          </button>
-        </div>
+        <Button
+          variant="outline"
+          onClick={() => fetchPage((pagination.currentPage || 1) + 1, { append: true })}
+          loading={loadingMore}
+          loadingText="Loading…"
+        >
+          Load more
+        </Button>
       )}
     </div>
   )

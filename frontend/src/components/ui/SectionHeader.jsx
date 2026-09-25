@@ -4,11 +4,16 @@ import { cn } from "../../lib/cn"
 
 /**
  * Section heading used across the home page and shop sections, so every
- * "Shop by Category" / "New Arrivals" / "Best Sellers" block shares the same
+ * "Shop by category" / "New arrivals" / "Best sellers" block shares the same
  * rhythm instead of each one inventing its own margins.
+ *
+ * There used to be an `eyebrow` prop rendering a small uppercase line above
+ * the title, and every section used it — "Just in" over "New arrivals",
+ * "Browse" over "Shop by category". Two headings that say the same thing is
+ * noise, so the prop is gone rather than merely unused, which keeps it from
+ * creeping back one section at a time.
  */
 const SectionHeader = ({
-  eyebrow,
   title,
   description,
   align = "center",
@@ -22,21 +27,15 @@ const SectionHeader = ({
   return (
     <div
       className={cn(
-        "mb-6 gap-4 md:mb-8",
+        "mb-5 gap-4 md:mb-7",
         centered ? "text-center" : "flex flex-wrap items-end justify-between text-left",
         className,
       )}
     >
       <div className={cn("min-w-0", centered && "mx-auto max-w-2xl")}>
-        {eyebrow && (
-          <span className="mb-2 inline-block text-xs font-semibold uppercase tracking-[0.12em] text-pink-600">
-            {eyebrow}
-          </span>
-        )}
-
         <Heading className="text-display-sm font-bold text-gray-900">{title}</Heading>
 
-        {description && <p className="mt-2 text-sm text-gray-600 md:text-base">{description}</p>}
+        {description && <p className="mt-1.5 text-sm text-gray-600">{description}</p>}
       </div>
 
       {actionLabel && actionTo && (
