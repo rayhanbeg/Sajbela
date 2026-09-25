@@ -8,7 +8,6 @@ import { useClickOutside } from "../../lib/hooks"
 import { CATEGORIES, PRIMARY_NAV, SHIPPING, STORE, categoryPath } from "../../lib/navigation"
 import { formatPrice } from "../../lib/utils"
 import { Badge, CountBadge, IconButton } from "../ui"
-import logo from "../../assets/logo.png"
 
 /**
  * Storefront header.
@@ -130,12 +129,13 @@ const Header = ({ onSearchClick, onCartClick, onMenuClick }) => {
               <Menu />
             </IconButton>
 
-            {/* Logo */}
+            {/* Wordmark */}
             <Link
               to="/"
-              className="shrink-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-pink-600"
+              aria-label="Sajbela home"
+              className="shrink-0 rounded-md font-serif text-[1.7rem] font-bold leading-none tracking-tight text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-pink-600 lg:text-[2.1rem]"
             >
-              <img src={logo} alt={`${STORE.name} — home`} className="h-8 w-auto lg:h-11" width="120" height="44" />
+              Sajbela
             </Link>
 
             {/* Desktop nav */}

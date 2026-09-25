@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom"
 import { Swiper, SwiperSlide } from "swiper/react"
 import { A11y, Autoplay, Keyboard, Pagination } from "swiper/modules"
-import { ArrowRight, Sparkles } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 
-import { STORE } from "../../lib/navigation"
 import { useMediaQuery } from "../../lib/hooks"
 import { Button, Image } from "../ui"
 
@@ -67,25 +66,22 @@ const HeroSection = () => {
         <div className="grid items-center gap-6 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)] lg:gap-10">
           {/* ── Copy ─────────────────────────────────────────────── */}
           <div className="max-w-xl animate-fade-in-up">
-            <span className="inline-flex items-center gap-1.5 rounded-pill bg-white px-3 py-1.5 text-xs font-semibold text-pink-700 shadow-sm ring-1 ring-pink-100">
-              <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
-              {STORE.nameBn} &middot; Handcrafted in Bangladesh
-            </span>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-pink-600">Sajbela essentials</p>
 
-            <h1 className="mt-4 text-display-md font-bold leading-[1.1] tracking-tight text-gray-900">
-              Jewelry &amp; cosmetics that <span className="text-pink-600">feel made for you</span>
+            <h1 className="mt-3 text-display-md font-bold leading-[1.1] tracking-tight text-gray-900">
+              Little details, <span className="text-pink-600">beautifully chosen.</span>
             </h1>
 
-            <p className="mt-3.5 text-sm leading-relaxed text-gray-600 md:text-base">
-              Handmade bangles, earrings and beauty picks. Cash on delivery across Bangladesh.
+            <p className="mt-3 text-sm leading-relaxed text-gray-600 md:text-base">
+              Jewelry and beauty picks for every day.
             </p>
 
-            <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
-              <Button to="/products" size="lg" rightIcon={<ArrowRight className="h-4 w-4" />}>
-                Shop the collection
+            <div className="mt-6 flex gap-2.5">
+              <Button to="/products" size="lg" rightIcon={<ArrowRight className="h-4 w-4" />} className="min-w-0 flex-1 px-3 text-sm sm:px-6 sm:text-base">
+                Shop now
               </Button>
-              <Button to="/products?section=new-arrivals" variant="outline" size="lg">
-                New arrivals
+              <Button to="/products?section=new-arrivals" variant="outline" size="lg" className="min-w-0 flex-1 px-3 text-sm sm:px-6 sm:text-base">
+                New in
               </Button>
             </div>
           </div>

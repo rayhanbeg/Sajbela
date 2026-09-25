@@ -16,7 +16,6 @@ import { cn } from "../../lib/cn"
 import { logout } from "../../lib/store/authSlice"
 import { CATEGORIES, SECONDARY_NAV, STORE, categoryPath } from "../../lib/navigation"
 import { Badge, Button, Drawer } from "../ui"
-import logo from "../../assets/logo.png"
 
 /**
  * Off-canvas menu for secondary destinations on mobile.
@@ -55,9 +54,13 @@ const MobileMenu = ({ open, onClose }) => {
       onClose={onClose}
       side="left"
       header={
-        <Link to="/" onClick={onClose} className="flex items-center gap-2.5">
-          <img src={logo} alt="" className="h-8 w-auto" />
-          <span className="sr-only">{STORE.name} home</span>
+        <Link
+          to="/"
+          onClick={onClose}
+          aria-label="Sajbela home"
+          className="rounded font-serif text-2xl font-bold tracking-tight text-pink-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500"
+        >
+          Sajbela
         </Link>
       }
       bodyClassName="px-3 py-4"

@@ -2,7 +2,6 @@ import { Link } from "react-router-dom"
 import { ArrowLeft } from "lucide-react"
 import { cn } from "../../lib/cn"
 import { STORE } from "../../lib/navigation"
-import logo from "../../assets/logo.png"
 
 /**
  * Shared shell for every /auth/* page.
@@ -11,7 +10,7 @@ import logo from "../../assets/logo.png"
  * max-w-7xl ... flex items-center justify-center min-h-[80vh]` wrapper and
  * their own heading block, which is why they didn't line up: one centred on
  * 80vh, one on the full page, and the card padding differed. One shell here
- * means the logo, card and footer sit in exactly the same place as you move
+ * means the wordmark, card and footer sit in exactly the same place as you move
  * between sign in, sign up and password reset — no jump.
  */
 
@@ -27,9 +26,10 @@ const AuthLayout = ({ title, description, notice, width = "md", children, footer
       <div className="mb-8 text-center">
         <Link
           to="/"
-          className="inline-block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2"
+          aria-label="Sajbela home"
+          className="inline-block rounded-lg font-serif text-4xl font-bold tracking-tight text-pink-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2"
         >
-          <img src={logo} alt={`${STORE.name} — home`} className="mx-auto h-10 w-auto" width="120" height="40" />
+          Sajbela
         </Link>
       </div>
 

@@ -28,10 +28,10 @@ export const SkeletonText = ({ lines = 3, className }) => (
   </div>
 )
 
-/** Product card placeholder — matches ProductCard's square image + 3 text rows. */
+/** Product card placeholder — matches ProductCard's portrait image + 3 text rows. */
 export const SkeletonProductCard = ({ className }) => (
   <div className={cn("overflow-hidden rounded-card border border-gray-100 bg-white shadow-card", className)}>
-    <Skeleton className="aspect-square w-full" rounded="rounded-none" />
+    <Skeleton className="aspect-[3/4] w-full" rounded="rounded-none" />
     <div className="space-y-2.5 p-3 md:p-4">
       <Skeleton className="h-4 w-full" rounded="rounded" />
       <Skeleton className="h-3 w-1/2" rounded="rounded" />

@@ -93,8 +93,8 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
       onMouseLeave={() => setHovered(false)}
       className={cn(
         "group relative flex h-full flex-col overflow-hidden rounded-card border border-gray-100 bg-white",
-        "shadow-card transition-all duration-300 ease-out-expo",
-        "hover:-translate-y-1 hover:border-pink-100 hover:shadow-card-hover",
+        "shadow-card transition-[transform,border-color,box-shadow] duration-300 ease-out-expo",
+        "hover:-translate-y-0.5 hover:border-pink-100 hover:shadow-card-hover",
         className,
       )}
     >
@@ -102,7 +102,7 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
         <Image
           src={primaryImage}
           alt={product.name}
-          aspect="square"
+          aspect="portrait"
           priority={priority}
           sizes={sizes}
           imgClassName={cn(
@@ -120,7 +120,7 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
             src={secondImage}
             alt=""
             aria-hidden="true"
-            aspect="square"
+            aspect="portrait"
             sizes={sizes}
             className={cn(
               "absolute inset-0 transition-opacity duration-500 ease-in-out-smooth",
@@ -157,8 +157,8 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-3 md:p-4">
-        <h3 className="text-sm font-semibold leading-snug text-gray-900 md:text-[0.9375rem]">
+      <div className="flex flex-1 flex-col gap-1.5 p-3 sm:p-3.5 md:p-4">
+        <h3 className="min-h-[2.5rem] text-sm font-semibold leading-snug text-gray-900 md:text-[0.9375rem]">
           <Link
             to={href}
             className={cn(
@@ -181,12 +181,12 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
         {Number(product.numReviews) > 0 ? (
           <Rating value={product.rating} count={product.numReviews} size="xs" />
         ) : (
-          <span className="text-xs text-gray-400">No reviews yet</span>
+          <span className="text-xs text-gray-400">New product</span>
         )}
 
         {/* mt-auto pins the price row to the bottom so uneven titles still line up. */}
-        <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-          <Price price={product.price} originalPrice={product.originalPrice} size="md" showBadge={false} />
+        <div className="mt-auto flex items-end justify-between gap-2 pt-2">
+          <Price price={product.price} originalPrice={product.originalPrice} size="sm" showBadge={false} />
 
           <button
             type="button"
@@ -200,7 +200,7 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
                   : `Add ${product.name} to cart`
             }
             className={cn(
-              "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200",
+              "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
               available
                 ? "bg-pink-600 text-white hover:bg-pink-700 active:scale-95"

@@ -124,7 +124,7 @@ const BottomNav = ({ onSearchClick, onCartClick }) => {
             "relative flex h-full w-full flex-col items-center justify-center gap-1",
             "transition-colors duration-200",
             "focus:outline-none focus-visible:bg-pink-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500",
-            active ? "text-pink-600" : "text-gray-500 hover:text-gray-700 active:bg-gray-50",
+            active ? "text-pink-600" : "text-gray-500 hover:text-gray-700",
           )
 
           return (

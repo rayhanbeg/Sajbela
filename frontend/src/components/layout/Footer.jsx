@@ -3,7 +3,6 @@ import { Facebook, Instagram, Mail, MapPin, Phone, Clock, ShieldCheck, Truck, Yo
 import { cn } from "../../lib/cn"
 import { CATEGORIES, LEGAL_NAV, SECONDARY_NAV, SHIPPING, STORE, categoryPath } from "../../lib/navigation"
 import { formatPrice } from "../../lib/utils"
-import logo from "../../assets/logo.png"
 
 /**
  * Storefront footer.
@@ -54,10 +53,10 @@ const Footer = () => {
       <div className="page-container grid grid-cols-2 gap-x-6 gap-y-10 py-12 lg:grid-cols-4 lg:py-14">
         {/* Brand */}
         <div className="col-span-2 lg:col-span-1">
-          <img src={logo} alt="" className="mb-4 h-10 w-auto brightness-0 invert" />
+          <p className="mb-3 font-serif text-3xl font-bold tracking-tight text-white">Sajbela</p>
 
-          <p className="text-lg font-bold text-pink-400">
-            {STORE.nameBn} &ndash; {STORE.name}
+          <p className="text-sm font-semibold text-pink-400">
+            {STORE.nameBn}
           </p>
           <p className="mt-2 max-w-xs text-sm text-gray-400">
             Handmade bangles, jewelry and cosmetics.
