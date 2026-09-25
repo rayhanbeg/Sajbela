@@ -91,7 +91,6 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
   }
 
   const chips = describeActiveFilters(filters, lockedKeys)
-  const total = pagination?.total ?? 0
   const totalPages = pagination?.totalPages ?? 1
 
   const filterPanel = (
@@ -103,10 +102,6 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
       showClear={chips.length > 0}
     />
   )
-
-  const resultsLabel = loading
-    ? "Loading products…"
-    : `${total} ${total === 1 ? "product" : "products"}`
 
   return (
     <div className={cn("page-container py-6 md:py-10", className)}>
@@ -121,11 +116,7 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
 
         <div className="min-w-0 flex-1">
           {/* ── Toolbar ───────────────────────────────────────── */}
-          <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-4">
-            <p aria-live="polite" className="text-sm text-gray-600">
-              {resultsLabel}
-            </p>
-
+          <div className="flex items-center justify-end gap-3 border-b border-gray-100 pb-4">
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"

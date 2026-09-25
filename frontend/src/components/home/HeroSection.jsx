@@ -63,9 +63,9 @@ const HeroSection = () => {
   return (
     <section className="bg-gradient-to-b from-pink-50 via-pink-50/40 to-white">
       <div className="page-container py-6 md:py-10 lg:py-12">
-        <div className="grid items-center gap-6 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)] lg:gap-10">
+        <div className="flex flex-col gap-5 md:gap-7">
           {/* ── Copy ─────────────────────────────────────────────── */}
-          <div className="max-w-xl animate-fade-in-up">
+          <div className="order-2 max-w-xl animate-fade-in-up">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-pink-600">Sajbela essentials</p>
 
             <h1 className="mt-3 text-display-md font-bold leading-[1.1] tracking-tight text-gray-900">
@@ -88,7 +88,7 @@ const HeroSection = () => {
 
           {/* ── Banner carousel ─────────────────────────────────── */}
           <div
-            className={`relative overflow-hidden rounded-card shadow-card lg:rounded-sheet ${PAGINATION_STYLES}`}
+            className={`order-1 relative overflow-hidden rounded-card shadow-card lg:rounded-sheet ${PAGINATION_STYLES}`}
           >
             <Swiper
               modules={[Autoplay, Pagination, Keyboard, A11y]}
@@ -111,7 +111,7 @@ const HeroSection = () => {
                       aspect="auto"
                       // The first banner is the LCP element on the home page.
                       priority={index === 0}
-                      sizes="(max-width: 1024px) 100vw, 60vw"
+                      sizes="100vw"
                       className="h-full w-full"
                       imgClassName="transition-transform duration-700 ease-out-expo group-hover:scale-[1.03]"
                     />

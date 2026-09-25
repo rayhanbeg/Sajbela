@@ -102,9 +102,10 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
         <Image
           src={primaryImage}
           alt={product.name}
-          aspect="portrait"
+          aspect="landscape"
           priority={priority}
           sizes={sizes}
+          fit="contain"
           imgClassName={cn(
             "transition-transform duration-500 ease-out-expo group-hover:scale-105",
             secondImage && hovered && "opacity-0",
@@ -120,8 +121,9 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
             src={secondImage}
             alt=""
             aria-hidden="true"
-            aspect="portrait"
+            aspect="landscape"
             sizes={sizes}
+            fit="contain"
             className={cn(
               "absolute inset-0 transition-opacity duration-500 ease-in-out-smooth",
               hovered ? "opacity-100" : "opacity-0",
@@ -157,8 +159,8 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-1.5 p-3 sm:p-3.5 md:p-4">
-        <h3 className="min-h-[2.5rem] text-sm font-semibold leading-snug text-gray-900 md:text-[0.9375rem]">
+      <div className="flex flex-1 flex-col gap-1 p-2.5 sm:p-3">
+        <h3 className="text-sm font-semibold leading-snug text-gray-900 md:text-[0.9375rem]">
           <Link
             to={href}
             className={cn(
@@ -178,14 +180,10 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
           </Link>
         </h3>
 
-        {Number(product.numReviews) > 0 ? (
-          <Rating value={product.rating} count={product.numReviews} size="xs" />
-        ) : (
-          <span className="text-xs text-gray-400">New product</span>
-        )}
+        {Number(product.numReviews) > 0 && <Rating value={product.rating} count={product.numReviews} size="xs" />}
 
         {/* mt-auto pins the price row to the bottom so uneven titles still line up. */}
-        <div className="mt-auto flex items-end justify-between gap-2 pt-2">
+        <div className="mt-auto flex items-end justify-between gap-2 pt-1.5">
           <Price price={product.price} originalPrice={product.originalPrice} size="sm" showBadge={false} />
 
           <button
