@@ -4,7 +4,7 @@ import { A11y, Autoplay, Keyboard, Pagination } from "swiper/modules"
 
 import api from "../../lib/api"
 import { useMediaQuery } from "../../lib/hooks"
-import { Button, Image } from "../ui"
+import { Button, Image, Skeleton } from "../ui"
 
 import "swiper/css"
 import "swiper/css/pagination"
@@ -26,6 +26,7 @@ const PAGINATION_STYLES = [
 const HeroSection = () => {
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)")
   const [banners, setBanners] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -35,15 +36,23 @@ const HeroSection = () => {
       .catch((error) => {
         if (error?.code !== "ERR_CANCELED" && error?.name !== "CanceledError") console.error("Could not load banners:", error)
       })
+      .finally(() => setLoading(false))
     return () => controller.abort()
   }, [])
+
+  if (loading) {
+    return (
+      <section aria-label="Loading featured offers" className="w-full">
+        <Skeleton className="aspect-[4/3] w-full sm:aspect-[16/10] lg:aspect-[16/9]" rounded="rounded-none" />
+      </section>
+    )
+  }
 
   if (banners.length === 0) return null
 
   return (
-    <section aria-label="Featured offers" className="bg-gradient-to-b from-pink-50 via-pink-50/40 to-white">
-      <div className="page-container py-4 md:py-7 lg:py-9">
-        <div className={"relative overflow-hidden rounded-card shadow-card lg:rounded-sheet " + PAGINATION_STYLES}>
+    <section aria-label="Featured offers" className="w-full">
+      <div className={"relative w-full overflow-hidden " + PAGINATION_STYLES}>
           <Swiper
             modules={[Autoplay, Pagination, Keyboard, A11y]}
             slidesPerView={1}
@@ -73,7 +82,6 @@ const HeroSection = () => {
               )
             })}
           </Swiper>
-        </div>
       </div>
     </section>
   )
