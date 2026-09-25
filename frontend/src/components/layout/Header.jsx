@@ -91,7 +91,7 @@ const Header = ({ onSearchClick, onCartClick }) => {
       </a>
 
       {/* Announcement bar */}
-      <div className="bg-pink-700 text-white">
+      <div className="hidden bg-pink-700 text-white md:block">
         <div className="page-container flex h-9 items-center justify-center gap-x-6 gap-y-0.5 text-xs sm:text-[0.8125rem]">
           <p className="flex items-center gap-1.5">
             <Truck aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
