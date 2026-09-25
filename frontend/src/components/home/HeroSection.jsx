@@ -65,7 +65,7 @@ const HeroSection = () => {
       <div className="page-container py-6 md:py-10 lg:py-12">
         <div className="flex flex-col gap-5 md:gap-7">
           {/* ── Copy ─────────────────────────────────────────────── */}
-          <div className="order-2 max-w-xl animate-fade-in-up">
+          <div className="order-2 hidden max-w-xl animate-fade-in-up md:block">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-pink-600">Sajbela essentials</p>
 
             <h1 className="mt-3 text-display-md font-bold leading-[1.1] tracking-tight text-gray-900">

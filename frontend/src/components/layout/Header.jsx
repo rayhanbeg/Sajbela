@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
-import { ChevronDown, LayoutDashboard, LogOut, Menu, Package, Phone, Search, ShoppingBag, Truck, User } from "lucide-react"
+import { ChevronDown, LayoutDashboard, LogOut, Package, Phone, Search, ShoppingBag, Truck, User } from "lucide-react"
 import { cn } from "../../lib/cn"
 import { logout } from "../../lib/store/authSlice"
 import { useClickOutside } from "../../lib/hooks"
@@ -18,7 +18,7 @@ import { Badge, CountBadge, IconButton } from "../ui"
  * real search affordance, and a stripped-back mobile bar that hands primary
  * navigation to <BottomNav/>.
  */
-const Header = ({ onSearchClick, onCartClick, onMenuClick }) => {
+const Header = ({ onSearchClick, onCartClick }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
@@ -119,16 +119,6 @@ const Header = ({ onSearchClick, onCartClick, onMenuClick }) => {
       <header className="sticky top-0 z-header bg-pink-600 shadow-md">
         <div className="page-container">
           <div className="flex h-16 items-center gap-3 lg:h-[4.5rem] lg:gap-6">
-            {/* Mobile: menu button */}
-            <IconButton
-              label="Open menu"
-              variant="ghost-light"
-              onClick={onMenuClick}
-              className="-ml-2 shrink-0 md:hidden"
-            >
-              <Menu />
-            </IconButton>
-
             {/* Wordmark */}
             <Link
               to="/"
