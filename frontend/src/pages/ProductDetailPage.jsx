@@ -20,6 +20,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  Modal,
   Price,
   QuantityStepper,
   Rating,
@@ -72,6 +73,7 @@ const ProductDetailPage = () => {
   const [selectedSize, setSelectedSize] = useState(null)
   const [selectedColor, setSelectedColor] = useState(null)
   const [pending, setPending] = useState(null) // "add" | "buy" | null
+  const [buyOpen, setBuyOpen] = useState(false)
 
   // Watches the inline action row so the mobile buy bar only appears once
   // you've scrolled past it — a bar that's always there is just clutter.
@@ -134,6 +136,7 @@ const ProductDetailPage = () => {
       ).unwrap()
 
       if (mode === "buy") {
+        setBuyOpen(false)
         navigate("/checkout")
       } else {
         toast.success(`${product.name} added to your cart`)
@@ -204,12 +207,17 @@ const ProductDetailPage = () => {
         {actionLabel}
       </Button>
 
+      {/*
+        Buy now is never gated on the inline pickers. It opens the confirmation
+        window instead, which asks for whatever is still missing — so a shopper
+        who taps it before choosing a size gets the pickers, not a dead button
+        and not a toast telling them off.
+      */}
       <Button
         variant="dark"
         size="lg"
         fullWidth
-        onClick={() => addToCart("buy")}
-        disabled={actionDisabled}
+        onClick={() => setBuyOpen(true)}
         loading={pending === "buy"}
         loadingText="Just a moment…"
       >
@@ -449,6 +457,58 @@ const ProductDetailPage = () => {
 
       {/* Clears the buy bar so the reassurance list isn't sitting under it. */}
       <div aria-hidden="true" className="h-20 lg:hidden" />
+
+      {/*
+        ── Buy-now window ───────────────────────────────────────
+        Edits the same `selectedColor` / `selectedSize` / `quantity` state the
+        inline pickers use, so confirming it can hand straight back to
+        addToCart("buy") — there's one add path and one set of variant rules,
+        rather than a second checkout route that could drift from it.
+      */}
+      <Modal open={buyOpen} onClose={() => setBuyOpen(false)} size="md" title="Buy now">
+        <div className="space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <p className="min-w-0 text-sm font-medium leading-snug text-gray-900">{product.name}</p>
+            <div className="shrink-0">
+              <Price price={product.price} originalPrice={product.originalPrice} size="md" showBadge={false} />
+            </div>
+          </div>
+
+          {(requiresColor || requiresSize) && (
+            <div className="space-y-4">
+              {requiresColor && (
+                <ColorPicker colors={colorOptions} value={selectedColor} onChange={setSelectedColor} />
+              )}
+              {requiresSize && <SizePicker sizes={sizeOptions} value={selectedSize} onChange={setSelectedSize} />}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-4 border-t border-gray-100 pt-4">
+            <span className="text-sm font-medium text-gray-900">Quantity</span>
+            <QuantityStepper
+              value={quantity}
+              onChange={setQuantity}
+              min={1}
+              max={Math.max(1, maxStock)}
+              disabled={missingChoice || !inStock}
+            />
+          </div>
+
+          <StockLine missingChoice={missingChoice} inStock={inStock} maxStock={maxStock} />
+        </div>
+
+        <Button
+          size="lg"
+          fullWidth
+          className="mt-5"
+          onClick={() => addToCart("buy")}
+          disabled={actionDisabled}
+          loading={pending === "buy"}
+          loadingText="Just a moment…"
+        >
+          {missingChoice ? actionLabel : "Confirm and check out"}
+        </Button>
+      </Modal>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { useSearchParams } from "react-router-dom"
-import { PackageSearch, SlidersHorizontal } from "lucide-react"
+import { ArrowUpDown, Check, PackageSearch, SlidersHorizontal } from "lucide-react"
 
 import { fetchProducts } from "../../lib/store/productSlice"
 import {
@@ -17,21 +17,12 @@ import {
   toQueryParams,
 } from "../../lib/catalog"
 import { cn } from "../../lib/cn"
-import {
-  Badge,
-  Button,
-  Drawer,
-  EmptyState,
-  ErrorState,
-  Pagination,
-  Select,
-  SkeletonProductCard,
-} from "../ui"
+import { Button, Drawer, EmptyState, ErrorState, IconButton, Pagination, SkeletonProductCard } from "../ui"
 import ProductCard from "./ProductCard"
 import ProductFilters from "./ProductFilters"
 
 /**
- * The shop experience: filters + sort + grid + pagination.
+ * The shop experience: products, and two icons to control them.
  *
  * Shared by /products and /category/:slug so the two can't drift apart. The
  * category route passes `lockedFilters={{ category: slug }}`, which forces the
@@ -41,9 +32,24 @@ import ProductFilters from "./ProductFilters"
  * All state lives in the query string. The previous implementation mirrored
  * the filters into component state as well, and the two copies had to be kept
  * in sync by an `isInitialized` flag and two chained effects.
+ *
+ * On chrome: this page used to carry a permanent 288px filter sidebar, a
+ * labelled Filters button, a sort dropdown showing its current value, and a
+ * row of removable filter chips with a "Clear all" link — four separate pieces
+ * of furniture competing with the products for attention. Everything now lives
+ * behind two icon buttons, which leaves the grid the full width of the page at
+ * every breakpoint. Nothing was dropped: both sheets reach the same filters and
+ * the same sort options, and a dot on the filter icon reports when a filter is
+ * narrowing the results. The category cross-links that used to sit in the
+ * sidebar are still crawlable from the header and footer, which list every
+ * category on every page.
  */
 
-const GRID_CLASSES = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:gap-5 xl:grid-cols-4"
+const GRID_CLASSES = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5"
+
+// Four columns at lg and no sidebar, so a card is roughly a quarter of the
+// content width once the gutters are taken off.
+const CARD_SIZES = "(max-width: 640px) 47vw, (max-width: 768px) 31vw, 24vw"
 
 const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
   const dispatch = useDispatch()
@@ -51,6 +57,7 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
   const { products, pagination, loading, error } = useSelector((state) => state.products)
 
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [sortOpen, setSortOpen] = useState(false)
 
   const lockedKeys = Object.keys(lockedFilters)
 
@@ -90,187 +97,132 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  const chips = describeActiveFilters(filters, lockedKeys)
+  // Counted, not listed. The number rides on the icon's accessible name so the
+  // dot isn't the only way to know a filter is on.
+  const activeCount = describeActiveFilters(filters, lockedKeys).length
   const totalPages = pagination?.totalPages ?? 1
 
-  // The mobile filter sheet's confirm button reports this count. It was being
-  // read without ever being declared, and because a Drawer's `footer` element
-  // is built eagerly as part of this render — not lazily when the sheet opens —
-  // the ReferenceError threw on the very first paint. That is why /products and
-  // /category/:slug went straight to the error screen instead of the shop.
-  const total = pagination?.total ?? products.length
-
-  const filterPanel = (
-    <ProductFilters
-      filters={filters}
-      lockedKeys={lockedKeys}
-      onChange={patch}
-      onClear={clearAll}
-      showClear={chips.length > 0}
-    />
-  )
-
   return (
-    <div className={cn("page-container py-6 md:py-10", className)}>
-      <div className="lg:flex lg:gap-8">
-        {/* ── Desktop sidebar ─────────────────────────────────── */}
-        <aside className="hidden w-64 shrink-0 lg:block xl:w-72">
-          {/* top-24 clears the sticky header + announcement bar. */}
-          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-card border border-gray-100 bg-white p-5 shadow-card">
-            {filterPanel}
-          </div>
-        </aside>
+    <div className={cn("page-container py-5 md:py-8", className)}>
+      {/* ── Controls ──────────────────────────────────────────── */}
+      <div className="flex items-center justify-end gap-2 pb-4">
+        <IconButton label="Sort products" variant="outline" onClick={() => setSortOpen(true)}>
+          <ArrowUpDown />
+        </IconButton>
 
-        <div className="min-w-0 flex-1">
-          {/* ── Toolbar ───────────────────────────────────────── */}
-          <div className="flex items-center justify-end gap-3 border-b border-gray-100 pb-4">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFiltersOpen(true)}
-                leftIcon={<SlidersHorizontal className="h-4 w-4" />}
-                className="lg:hidden"
-              >
-                Filters
-                {chips.length > 0 && (
-                  <Badge tone="brand-solid" size="xs" className="ml-1">
-                    {chips.length}
-                  </Badge>
-                )}
-              </Button>
-
-              <Select
-                size="sm"
-                value={sort}
-                aria-label="Sort products"
-                onChange={(event) => patch({ sort: event.target.value === DEFAULT_SORT ? "" : event.target.value })}
-                containerClassName="w-40 sm:w-48"
-              >
-                {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-
-          {/* ── Active filter chips ───────────────────────────── */}
-          {chips.length > 0 && (
-            <ul className="flex flex-wrap items-center gap-2 pt-4">
-              {chips.map((chip) => (
-                <li key={chip.key}>
-                  <button
-                    type="button"
-                    onClick={() => patch(chip.patch)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-pill bg-pink-50 py-1.5 pl-3 pr-2.5",
-                      "text-xs font-medium text-pink-800 ring-1 ring-inset ring-pink-200",
-                      "transition-colors hover:bg-pink-100",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500",
-                    )}
-                  >
-                    {chip.label}
-                    <span aria-hidden="true" className="text-sm leading-none text-pink-500">
-                      &times;
-                    </span>
-                    <span className="sr-only">Remove filter</span>
-                  </button>
-                </li>
-              ))}
-
-              <li>
-                <button
-                  type="button"
-                  onClick={clearAll}
-                  className="rounded px-1 text-xs font-semibold text-gray-500 underline-offset-2 hover:text-gray-900 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500"
-                >
-                  Clear all
-                </button>
-              </li>
-            </ul>
+        <IconButton
+          label={activeCount > 0 ? `Filters, ${activeCount} applied` : "Filters"}
+          variant="outline"
+          onClick={() => setFiltersOpen(true)}
+        >
+          <SlidersHorizontal />
+          {activeCount > 0 && (
+            <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-pink-600 ring-2 ring-white" />
           )}
-
-          {/* ── Results ───────────────────────────────────────── */}
-          <div className="pt-5 md:pt-6">
-            {loading ? (
-              <div className={GRID_CLASSES} aria-hidden="true">
-                {Array.from({ length: PAGE_SIZE }).map((_, i) => (
-                  <SkeletonProductCard key={i} />
-                ))}
-              </div>
-            ) : error ? (
-              <ErrorState
-                description={typeof error === "string" ? error : "We couldn't load these products."}
-                onRetry={() => dispatch(fetchProducts(JSON.parse(queryKey)))}
-              />
-            ) : products.length === 0 ? (
-              <EmptyState
-                icon={<PackageSearch />}
-                title="No products match these filters"
-                description={
-                  chips.length > 0
-                    ? "Try removing a filter."
-                    : "Nothing here yet — check back soon."
-                }
-                action={
-                  chips.length > 0 ? (
-                    <Button onClick={clearAll}>Clear all filters</Button>
-                  ) : (
-                    emptyAction || <Button to="/products">Browse all products</Button>
-                  )
-                }
-              />
-            ) : (
-              <>
-                <ul className={GRID_CLASSES}>
-                  {products.map((product, index) => (
-                    <li key={product._id}>
-                      <ProductCard
-                        product={product}
-                        // First row is above the fold on most viewports.
-                        priority={page === 1 && index < 4}
-                        sizes="(max-width: 640px) 47vw, (max-width: 768px) 31vw, (max-width: 1280px) 30vw, 22vw"
-                      />
-                    </li>
-                  ))}
-                </ul>
-
-                <Pagination
-                  currentPage={pagination?.currentPage || page}
-                  totalPages={totalPages}
-                  onPageChange={goToPage}
-                  className="mt-10"
-                />
-              </>
-            )}
-          </div>
-        </div>
+        </IconButton>
       </div>
 
-      {/* ── Mobile filter sheet ─────────────────────────────── */}
+      {/* ── Products ──────────────────────────────────────────── */}
+      {loading ? (
+        <div className={GRID_CLASSES} aria-hidden="true">
+          {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+            <SkeletonProductCard key={i} />
+          ))}
+        </div>
+      ) : error ? (
+        <ErrorState
+          description={typeof error === "string" ? error : "We couldn't load these products."}
+          onRetry={() => dispatch(fetchProducts(JSON.parse(queryKey)))}
+        />
+      ) : products.length === 0 ? (
+        <EmptyState
+          icon={<PackageSearch />}
+          title="No products found"
+          action={
+            activeCount > 0 ? (
+              <Button onClick={clearAll}>Clear filters</Button>
+            ) : (
+              emptyAction || <Button to="/products">Browse all products</Button>
+            )
+          }
+        />
+      ) : (
+        <>
+          <ul className={GRID_CLASSES}>
+            {products.map((product, index) => (
+              <li key={product._id}>
+                <ProductCard
+                  product={product}
+                  // First row is above the fold on most viewports.
+                  priority={page === 1 && index < 4}
+                  sizes={CARD_SIZES}
+                />
+              </li>
+            ))}
+          </ul>
+
+          <Pagination
+            currentPage={pagination?.currentPage || page}
+            totalPages={totalPages}
+            onPageChange={goToPage}
+            className="mt-10"
+          />
+        </>
+      )}
+
+      {/* ── Filter sheet ──────────────────────────────────────── */}
       <Drawer
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}
         side="bottom"
         title="Filters"
-        footer={
-          <div className="flex gap-2.5">
-            {chips.length > 0 && (
-              <Button variant="outline" size="lg" onClick={clearAll} className="flex-1">
-                Clear all
-              </Button>
-            )}
-            <Button size="lg" onClick={() => setFiltersOpen(false)} className="flex-1">
-              {/* Filters apply live, so this confirms rather than submits. */}
-              {loading ? "Show results" : `Show ${total} ${total === 1 ? "result" : "results"}`}
-            </Button>
-          </div>
-        }
         bodyClassName="px-4 py-4"
       >
-        <ProductFilters filters={filters} lockedKeys={lockedKeys} onChange={patch} onClear={clearAll} showClear={false} />
+        {/*
+          No footer. Filters apply live, so a "Show N results" button only ever
+          confirmed something that had already happened — and "Clear all" is
+          rendered by the panel itself whenever there's something to clear.
+        */}
+        <ProductFilters
+          filters={filters}
+          lockedKeys={lockedKeys}
+          onChange={patch}
+          onClear={clearAll}
+          showClear={activeCount > 0}
+        />
+      </Drawer>
+
+      {/* ── Sort sheet ────────────────────────────────────────── */}
+      <Drawer open={sortOpen} onClose={() => setSortOpen(false)} side="bottom" title="Sort" bodyClassName="px-2 py-2">
+        <ul>
+          {SORT_OPTIONS.map((option) => {
+            const selected = sort === option.value
+
+            return (
+              <li key={option.value}>
+                <button
+                  type="button"
+                  aria-current={selected || undefined}
+                  onClick={() => {
+                    // The default sort is implied by an absent param, which
+                    // keeps the tidiest URL shareable.
+                    patch({ sort: option.value === DEFAULT_SORT ? "" : option.value })
+                    setSortOpen(false)
+                  }}
+                  className={cn(
+                    "flex min-h-[2.75rem] w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm",
+                    "transition-colors duration-150",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500",
+                    selected ? "bg-pink-50/70 font-medium text-pink-900" : "text-gray-700 hover:bg-gray-50",
+                  )}
+                >
+                  {option.label}
+                  {selected && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-pink-600" />}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
       </Drawer>
     </div>
   )

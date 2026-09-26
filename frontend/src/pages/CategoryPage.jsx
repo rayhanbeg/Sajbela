@@ -82,10 +82,18 @@ const CategoryPage = () => {
         </div>
       </div>
 
-      <ProductCatalog
-        lockedFilters={{ category: category.slug }}
-        emptyAction={<Button to="/products">Browse all products</Button>}
-      />
+      {/*
+        bg-gray-50 to match /products. The page body is white, so without this
+        the toolbar's white outline buttons and the white product cards had no
+        edge against it — the sidebar used to carry a border that hid the
+        problem, and it's gone now.
+      */}
+      <div className="bg-gray-50">
+        <ProductCatalog
+          lockedFilters={{ category: category.slug }}
+          emptyAction={<Button to="/products">Browse all products</Button>}
+        />
+      </div>
     </div>
   )
 }

@@ -23,18 +23,36 @@ import "swiper/css/pagination"
  * empty margin off the top and bottom. The ratios below therefore only ever get
  * *wider* as the viewport grows: 1.5 → 2.33 → 3.0.
  *
- * That's also why there's no height cap any more. Capping the height of an
- * aspect box silently replaces the declared ratio with `viewport ÷ cap`, and
- * the old 16/9-with-a-512px-ceiling bound at about 910px wide — so a 1440px
- * desktop was really rendering a 2.81 box and cropping about a third off the
- * banner's height. The ratio is now always the ratio, which also means zero
- * layout shift, since the skeleton reserves exactly the same box.
+ * That's also why the desktop side is capped with a height ceiling rather than
+ * a wider ratio — see the FRAME note below.
  *
  * Upload target: 2400 × 1000 or anything wider than 3:2. Narrower than 3:2 and
  * phones start losing the left and right edges.
  */
 
-const FRAME = "aspect-[3/2] w-full md:aspect-[21/9] 2xl:aspect-[3/1]"
+/**
+ * Small screens keep the 3:2 ratio and nothing else — the phone frame is
+ * exactly as it was.
+ *
+ * From md up the banner gets a height ceiling so it reads as a banner rather
+ * than a full screen of picture. The ceiling is a `max-height` and not a wider
+ * ratio, and that distinction is the whole point: raising the ratio (21/9 →
+ * 3/1) would also *grow* the frame, so at 1536px wide it would want 512px — the
+ * cap would never bite and the banner would be no shorter at all. A max-height
+ * is applied after the ratio, so the box is width-first, full-bleed, and its
+ * height stops at 544px however wide the monitor gets.
+ *
+ * It only binds from about 1140px up. Below that the 2.33 box is already under
+ * the ceiling and the two are identical, which is why tablets and small laptops
+ * are unaffected. `object-cover` crops the extra off the top and bottom (see
+ * the crop note above — vertical is the safe axis), and `object-center` splits
+ * it evenly. Widening the ratio instead would have cropped horizontally, which
+ * is the one axis that cuts the banner's message in half.
+ *
+ * Because the skeleton reuses this same class string, the reserved box still
+ * matches the rendered one exactly — no layout shift.
+ */
+const FRAME = "aspect-[3/2] w-full md:aspect-[21/9] md:max-h-[34rem]"
 
 const PAGINATION_STYLES = [
   "[&_.swiper-pagination]:!bottom-3",
