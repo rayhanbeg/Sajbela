@@ -1,36 +1,51 @@
 import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { useDispatch } from "react-redux"
-import { ShoppingBag, SlidersHorizontal } from "lucide-react"
+import { Link } from "react-router-dom"
 
-import { addToCartAsync, fetchCart } from "../../lib/store/cartSlice"
+import { formatPrice } from "../../lib/utils"
 import { cn } from "../../lib/cn"
-import { Badge, Image, Price, Rating, Spinner, getDiscount, useToast } from "../ui"
-import { useStorefrontUI } from "../../lib/storefrontUI"
+import { Image, getDiscount } from "../ui"
 
 /**
  * The product card. One implementation, used by every grid and carousel on the
- * site — the home sections, the shop page and the "related products" rail all
- * previously inlined their own near-identical copy, which is why the NEW badge
- * showed on featured products that weren't new and the stars rendered as text
- * glyphs in some places and not others.
+ * site — the home sections, the shop page and the "related products" rail.
  *
- * Accessibility note: the old card nested an add-to-cart <button> inside the
- * card's <Link>, which is invalid HTML and made the button unreachable for
- * some screen readers. Here the title is the only link, and it stretches over
- * the whole card via `after:absolute after:inset-0`; the button sits above it
- * on the z-axis. Result: one link, one button, whole card still clickable.
+ * ── Why there's no button ────────────────────────────────────────────────
+ *
+ * There used to be a 40px add-to-cart button in the bottom-right of every
+ * card, plus a stretched link over the whole thing. It bought a one-tap add
+ * for products with no variants, and in exchange it cost a second focus stop
+ * per card, a z-index layering problem, and — for the majority of products,
+ * which do have a colour or size — a button that couldn't actually add
+ * anything and just navigated to the detail page anyway.
+ *
+ * Now the card *is* the link. No button, no stretched pseudo-element, no
+ * stacking: one anchor wraps everything, so there's one focus stop and one tap
+ * target the size of the card. That's what removes the need for the
+ * `after:absolute after:inset-0` trick and its z-index dance, and it's why the
+ * focus ring can sit on the card itself rather than on a pseudo-box.
+ *
+ * The trade: adding from a grid means one extra tap on the detail page. For a
+ * catalogue where most products need a size or colour chosen first, that's the
+ * same number of taps as before for most of the grid, and one more for the
+ * rest — paid for with a card that reads as product, not as a control panel.
+ *
+ * ── Design ───────────────────────────────────────────────────────────────
+ *
+ * No border, no shadow, no panel. The photo is the card; hairline chrome
+ * around every tile in a 48-tile grid is what made the old grid feel busy.
+ * Everything below the image is three lines at most: name, price, and the
+ * strikethrough when there's a discount. The discount *is* the price display
+ * now — a "25% off" pill stacked on a photo that already shows the struck
+ * original was the same fact stated twice, and it was the loudest thing on
+ * the card.
  */
 
-/** Variant products can't be added from a grid — you have to pick a size/colour first. */
-function needsVariantChoice(product) {
-  if (product.category === "bangles") return true
-  if (product.colors?.length > 0) return true
-  if (product.sizes?.length > 0) return true
-  return false
-}
+/** Aspect used by both this card and its skeleton — 4:5 crops a jewellery or
+ *  cosmetic bottle shot far less aggressively than a square while still giving
+ *  the grid a consistent, slightly editorial proportion. */
+const FRAME = "aspect-[4/5] w-full"
 
-/** Mirrors the backend's per-variant stock model. */
+/** The card is unavailable if the product is, or if every variant is sold out. */
 function isAvailable(product) {
   if (product.category === "bangles" && product.sizes?.length) {
     return product.sizes.some((size) => size.available && size.stock > 0)
@@ -42,213 +57,130 @@ function isAvailable(product) {
 }
 
 const ProductCard = ({ product, priority = false, sizes, className }) => {
-  const dispatch = useDispatch()
-  const navigate = useNavigate()
-  const toast = useToast()
-  const { openCart } = useStorefrontUI()
-
-  // Local, not the shared cart.loading flag — that one is global, so a single
-  // add-to-cart used to put every card on the page into a loading state.
-  const [pending, setPending] = useState(false)
   const [hovered, setHovered] = useState(false)
 
   const href = `/products/${product._id}`
   const available = isAvailable(product)
-  const variantChoice = needsVariantChoice(product)
-  const discount = getDiscount(product.price, product.originalPrice)
 
   const primaryImage = product.images?.[0]?.url || product.image
   const secondImage = product.images?.[1]?.url
 
-  const handleAction = async (event) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    // Send shoppers to the detail page to choose a variant.
-    if (variantChoice) {
-      navigate(href)
-      return
-    }
-
-    setPending(true)
-    try {
-      // `product` rides along so a guest line can snapshot it without a second
-      // fetch — the grid already has the whole document.
-      await dispatch(addToCartAsync({ productId: product._id, quantity: 1, product })).unwrap()
-      toast.success(`${product.name} added to your cart`)
-      openCart()
-    } catch (error) {
-      const message = typeof error === "string" ? error : error?.message || "Could not add to cart"
-      toast.error(message)
-      // Re-sync in case the failure was a stale local quantity.
-      dispatch(fetchCart())
-    } finally {
-      setPending(false)
-    }
-  }
+  // Only the struck-through original survives from the old price block. The
+  // "N% off" pill is gone: the struck price already says there's a discount,
+  // and the percentage is arithmetic the shopper can see.
+  const discount = getDiscount(product.price, product.originalPrice)
 
   return (
     <article
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={cn(
-        "group relative flex h-full flex-col overflow-hidden rounded-card border border-gray-100 bg-white",
-        "shadow-card transition-[transform,border-color,box-shadow] duration-300 ease-out-expo",
-        "hover:-translate-y-0.5 hover:border-pink-100 hover:shadow-card-hover",
-        className,
-      )}
+      /* `group` so the image can respond to hover anywhere on the card, not
+         just on the photo itself. `h-full` because the grid stretches every
+         cell to the row's tallest card — without it the caption can't reach the
+         bottom and `mt-auto` below has nothing to push against, which is what
+         makes prices line up across a row of uneven names. */
+      className={cn("group h-full", className)}
     >
-      {/*
-        The square frame belongs to the card, and both photos fill it from out
-        of flow. That split is the fix for the card's height.
-
-        The hover photo used to be handed its positioning through the Image's
-        `className`. But cn() is a plain string joiner with no tailwind-merge,
-        and Tailwind emits its position utilities in source order — .relative
-        comes after .absolute — so Image's own base class won the cascade and
-        the second photo never left the flow. It stacked underneath the first
-        one, making any card with two images twice as tall, and because grid
-        rows size to their tallest item that single card dragged every sibling
-        down with it. The result was the long dead gap between title and price
-        on cards that looked perfectly normal themselves.
-
-        Now the frame carries the ratio and contains nothing but absolutely
-        positioned children, so its height is always exactly the card width and
-        no image can change it. Cover trims about an eighth off the top and
-        bottom of a 3:4 shot, which these lifestyle photos have to spare — they
-        aren't white-background packshots that need to be shown whole.
-      */}
-      <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-white">
-        <div className="absolute inset-0">
-          <Image
-            src={primaryImage}
-            alt={product.name}
-            aspect="auto"
-            priority={priority}
-            sizes={sizes}
-            fit="cover"
-            background="bg-white"
-            className="h-full w-full"
-            imgClassName={cn(
-              "transition-transform duration-500 ease-out-expo group-hover:scale-105",
-              secondImage && hovered && "opacity-0",
-            )}
-          />
-        </div>
-
+      <Link
+        to={href}
+        className={cn(
+          "flex h-full flex-col overflow-hidden rounded-card",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500",
+          // Against the page, not the card — the card has no background of its
+          // own any more, so an inner ring would have nothing to sit inside.
+          "focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+        )}
+      >
         {/*
-          Second image crossfades on top rather than swapping the first one's
-          src — swapping caused a blank flash while the new file downloaded.
-          The positioning sits on this wrapper, never on the Image itself.
+          Both photos are absolutely positioned children of the frame, so no
+          image can ever change the frame's height — it is always exactly 4:5 of
+          the card width.
+
+          This is deliberate and worth keeping. The hover photo was once handed
+          its positioning through Image's `className`, but cn() is a plain
+          string joiner with no tailwind-merge, and Tailwind emits position
+          utilities in source order — .relative comes after .absolute — so
+          Image's own base class won the cascade and the second photo stayed in
+          flow. It stacked under the first one, every card with two images was
+          twice as tall, and because grid rows size to their tallest item, one
+          such card dragged the whole row down with it.
         */}
-        {secondImage && (
-          <div
-            className={cn(
-              "absolute inset-0 transition-opacity duration-500 ease-in-out-smooth",
-              hovered ? "opacity-100" : "opacity-0",
-            )}
-          >
+        <div className={cn("relative shrink-0 overflow-hidden bg-gray-50", FRAME)}>
+          <div className="absolute inset-0">
             <Image
-              src={secondImage}
-              alt=""
-              aria-hidden="true"
+              src={primaryImage}
+              alt={product.name}
               aspect="auto"
+              priority={priority}
               sizes={sizes}
               fit="cover"
-              background="bg-white"
+              background="bg-gray-50"
               className="h-full w-full"
-              imgClassName="scale-105"
+              imgClassName={cn(
+                // Slow and small — a grid of cards that all lurch when the
+                // pointer crosses them reads as jumpy.
+                "transition-transform duration-[600ms] ease-out-expo group-hover:scale-[1.04]",
+                secondImage && hovered && "opacity-0",
+              )}
             />
           </div>
-        )}
 
-        <div className="pointer-events-none absolute left-2 top-2 flex flex-col items-start gap-1.5 md:left-3 md:top-3">
-          {discount && (
-            <Badge tone="danger-solid" size="sm">
-              {discount.percent}% off
-            </Badge>
+          {/*
+            Crossfades over the first photo rather than swapping its src —
+            swapping caused a blank flash while the new file downloaded.
+          */}
+          {secondImage && (
+            <div
+              aria-hidden="true"
+              className={cn(
+                "absolute inset-0 transition-opacity duration-500 ease-in-out-smooth",
+                hovered ? "opacity-100" : "opacity-0",
+              )}
+            >
+              <Image
+                src={secondImage}
+                alt=""
+                aspect="auto"
+                sizes={sizes}
+                fit="cover"
+                background="bg-gray-50"
+                className="h-full w-full"
+                imgClassName="scale-[1.04]"
+              />
+            </div>
           )}
-          {product.isNewArrival && (
-            <Badge tone="brand-solid" size="sm">
-              New
-            </Badge>
-          )}
-          {product.isCombo && (
-            <Badge tone="info" size="sm">
-              Combo
-            </Badge>
+
+          {/*
+            A veil and one line of text. The old version dropped a white pill
+            badged "Out of stock" into the middle of the photo, which is a lot
+            of chrome for a state the shopper only needs told once.
+          */}
+          {!available && (
+            <div className="absolute inset-0 flex items-end justify-center bg-white/60 pb-4">
+              <span className="rounded-full bg-gray-900/80 px-3 py-1 text-[0.6875rem] font-medium tracking-wide text-white">
+                Sold out
+              </span>
+            </div>
           )}
         </div>
 
-        {!available && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
-            <Badge tone="danger" size="md">
-              Out of stock
-            </Badge>
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-1 flex-col gap-1 border-t border-gray-100 p-2.5 sm:p-3">
-        <h3 className="text-sm font-medium leading-snug text-gray-900">
-          <Link
-            to={href}
-            className={cn(
-              "line-clamp-2 transition-colors after:absolute after:inset-0 after:content-['']",
-              "hover:text-pink-600 focus:outline-none",
-              /*
-               * The focus ring is drawn on the stretched ::after box, not on
-               * the article — a focus-within ring on the card would also fire
-               * when the add-to-cart button is focused, doubling up with that
-               * button's own ring.
-               */
-              "focus-visible:after:rounded-card focus-visible:after:outline focus-visible:after:outline-2",
-              "focus-visible:after:outline-offset-2 focus-visible:after:outline-pink-500",
-            )}
-          >
+        {/* `shrink-0` so a long name can't squeeze the photo — the ratio frame
+            sets the height and the caption takes what's left. `mt-auto` on the
+            price then pins it to the bottom of the stretched cell. */}
+        <div className="flex flex-1 flex-col pt-2.5">
+          <h3 className="line-clamp-2 text-sm font-medium leading-snug text-gray-900 transition-colors duration-200 group-hover:text-pink-600">
             {product.name}
-          </Link>
-        </h3>
+          </h3>
 
-        {Number(product.numReviews) > 0 && <Rating value={product.rating} count={product.numReviews} size="xs" />}
+          <p className="mt-auto flex flex-wrap items-baseline gap-x-1.5 pt-1.5">
+            <span className="text-sm font-semibold text-gray-900">{formatPrice(product.price)}</span>
 
-        {/* mt-auto pins the price row to the bottom so uneven titles still line up. */}
-        <div className="mt-auto flex items-end justify-between gap-2 pt-1.5">
-          <Price price={product.price} originalPrice={product.originalPrice} size="sm" showBadge={false} />
-
-          <button
-            type="button"
-            onClick={handleAction}
-            disabled={!available || pending}
-            aria-label={
-              !available
-                ? `${product.name} is out of stock`
-                : variantChoice
-                  ? `Choose options for ${product.name}`
-                  : `Add ${product.name} to cart`
-            }
-            className={cn(
-              // 40px, not the old 36px — this is the only tap target on the
-              // card that isn't the full-card stretched link.
-              "relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
-              available
-                ? "bg-pink-600 text-white hover:bg-pink-700 active:scale-95"
-                : "cursor-not-allowed bg-gray-100 text-gray-400",
-              pending && "cursor-wait",
+            {discount && (
+              <span className="text-xs text-gray-400 line-through">{formatPrice(discount.original)}</span>
             )}
-          >
-            {pending ? (
-              // label={null} — the button's own aria-label already names the action.
-              <Spinner size="xs" label={null} />
-            ) : variantChoice ? (
-              <SlidersHorizontal aria-hidden="true" className="h-4 w-4" />
-            ) : (
-              <ShoppingBag aria-hidden="true" className="h-4 w-4" />
-            )}
-          </button>
+          </p>
         </div>
-      </div>
+      </Link>
     </article>
   )
 }

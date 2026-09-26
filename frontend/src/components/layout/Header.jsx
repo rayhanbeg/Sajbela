@@ -240,6 +240,29 @@ const Header = ({ onSearchClick, onCartClick }) => {
                 <Search />
               </IconButton>
 
+              {/*
+                Admin, for mobile and tablet. The desktop "Admin" link sits
+                inside the nav, which is `hidden md:flex` — so below md it was
+                simply unreachable: an admin on a phone had to type /admin by
+                hand. This one lives in the actions row, which renders at every
+                width, and hides from md up where the nav link takes over.
+              */}
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  aria-label="Admin dashboard"
+                  title="Admin dashboard"
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-full text-yellow-200",
+                    "transition-colors duration-200 hover:bg-white/15 hover:text-yellow-100 active:scale-95",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-pink-600",
+                    "md:hidden",
+                  )}
+                >
+                  <LayoutDashboard aria-hidden="true" className="h-5 w-5" />
+                </Link>
+              )}
+
               {/* Account (desktop only — mobile uses the bottom nav) */}
               <div ref={accountRef} className="relative hidden md:block">
                 <button

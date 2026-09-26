@@ -28,16 +28,20 @@ export const SkeletonText = ({ lines = 3, className }) => (
   </div>
 )
 
-/** Product card placeholder. Tracks ProductCard's square image + two title
- *  lines + price row — if this drifts, load introduces the layout shift the
- *  skeleton exists to prevent. */
+/** Product card placeholder. Tracks ProductCard's 4:5 image + two title lines +
+ *  price row — if this drifts, load introduces the layout shift the skeleton
+ *  exists to prevent.
+ *
+ *  No card chrome (border, shadow, white panel): ProductCard dropped all three,
+ *  so a placeholder that still drew them would flash a boxed grid and then
+ *  un-box it the moment data landed. */
 export const SkeletonProductCard = ({ className }) => (
-  <div className={cn("overflow-hidden rounded-card border border-gray-100 bg-white shadow-card", className)}>
-    <Skeleton className="aspect-square w-full" rounded="rounded-none" />
-    <div className="space-y-2 border-t border-gray-100 p-2.5 sm:p-3">
+  <div className={cn(className)}>
+    <Skeleton className="aspect-[4/5] w-full rounded-card" />
+    <div className="space-y-2 pt-2.5">
       <Skeleton className="h-4 w-full" rounded="rounded" />
       <Skeleton className="h-4 w-2/3" rounded="rounded" />
-      <Skeleton className="h-5 w-24" rounded="rounded" />
+      <Skeleton className="h-5 w-20" rounded="rounded" />
     </div>
   </div>
 )
