@@ -93,6 +93,13 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
   const chips = describeActiveFilters(filters, lockedKeys)
   const totalPages = pagination?.totalPages ?? 1
 
+  // The mobile filter sheet's confirm button reports this count. It was being
+  // read without ever being declared, and because a Drawer's `footer` element
+  // is built eagerly as part of this render — not lazily when the sheet opens —
+  // the ReferenceError threw on the very first paint. That is why /products and
+  // /category/:slug went straight to the error screen instead of the shop.
+  const total = pagination?.total ?? products.length
+
   const filterPanel = (
     <ProductFilters
       filters={filters}

@@ -99,52 +99,67 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
       )}
     >
       {/*
-        Square frame, `object-cover`, no letterboxing.
-        Two things were wrong before. The frame was 4/3 landscape while the
-        photos arrive square or portrait (Cloudinary `c_limit` at 800x800), and
-        `object-contain` then left a dead band down each side — so the card was
-        tall and mostly empty, with the price row stranded a long way below the
-        title. Square plus cover means the photo fills the frame edge to edge at
-        every breakpoint: no bands, no wasted height, and an identical image
-        height for every card in a row so titles and prices line up without a
-        subgrid. Cover trims about an eighth off the top and bottom of a 3:4
-        shot, which these lifestyle photos have to spare — they aren't
-        white-background packshots that need to be shown whole.
+        The square frame belongs to the card, and both photos fill it from out
+        of flow. That split is the fix for the card's height.
+
+        The hover photo used to be handed its positioning through the Image's
+        `className`. But cn() is a plain string joiner with no tailwind-merge,
+        and Tailwind emits its position utilities in source order — .relative
+        comes after .absolute — so Image's own base class won the cascade and
+        the second photo never left the flow. It stacked underneath the first
+        one, making any card with two images twice as tall, and because grid
+        rows size to their tallest item that single card dragged every sibling
+        down with it. The result was the long dead gap between title and price
+        on cards that looked perfectly normal themselves.
+
+        Now the frame carries the ratio and contains nothing but absolutely
+        positioned children, so its height is always exactly the card width and
+        no image can change it. Cover trims about an eighth off the top and
+        bottom of a 3:4 shot, which these lifestyle photos have to spare — they
+        aren't white-background packshots that need to be shown whole.
       */}
-      <div className="relative overflow-hidden">
-        <Image
-          src={primaryImage}
-          alt={product.name}
-          aspect="square"
-          priority={priority}
-          sizes={sizes}
-          fit="cover"
-          background="bg-white"
-          imgClassName={cn(
-            "transition-transform duration-500 ease-out-expo group-hover:scale-105",
-            secondImage && hovered && "opacity-0",
-          )}
-        />
+      <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-white">
+        <div className="absolute inset-0">
+          <Image
+            src={primaryImage}
+            alt={product.name}
+            aspect="auto"
+            priority={priority}
+            sizes={sizes}
+            fit="cover"
+            background="bg-white"
+            className="h-full w-full"
+            imgClassName={cn(
+              "transition-transform duration-500 ease-out-expo group-hover:scale-105",
+              secondImage && hovered && "opacity-0",
+            )}
+          />
+        </div>
 
         {/*
           Second image crossfades on top rather than swapping the first one's
           src — swapping caused a blank flash while the new file downloaded.
+          The positioning sits on this wrapper, never on the Image itself.
         */}
         {secondImage && (
-          <Image
-            src={secondImage}
-            alt=""
-            aria-hidden="true"
-            aspect="square"
-            sizes={sizes}
-            fit="cover"
-            background="bg-white"
+          <div
             className={cn(
               "absolute inset-0 transition-opacity duration-500 ease-in-out-smooth",
               hovered ? "opacity-100" : "opacity-0",
             )}
-            imgClassName="scale-105"
-          />
+          >
+            <Image
+              src={secondImage}
+              alt=""
+              aria-hidden="true"
+              aspect="auto"
+              sizes={sizes}
+              fit="cover"
+              background="bg-white"
+              className="h-full w-full"
+              imgClassName="scale-105"
+            />
+          </div>
         )}
 
         <div className="pointer-events-none absolute left-2 top-2 flex flex-col items-start gap-1.5 md:left-3 md:top-3">
