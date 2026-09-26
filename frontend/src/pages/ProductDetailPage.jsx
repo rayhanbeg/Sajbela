@@ -73,7 +73,10 @@ const ProductDetailPage = () => {
   const [selectedSize, setSelectedSize] = useState(null)
   const [selectedColor, setSelectedColor] = useState(null)
   const [pending, setPending] = useState(null) // "add" | "buy" | null
-  const [buyOpen, setBuyOpen] = useState(false)
+  // Which action the variant window is collecting for — null when it's closed.
+  // It carries the intent rather than a boolean, so one window serves both
+  // buttons and its confirm button knows what to do when it closes.
+  const [choiceMode, setChoiceMode] = useState(null) // "add" | "buy" | null
 
   // Watches the inline action row so the mobile buy bar only appears once
   // you've scrolled past it — a bar that's always there is just clutter.
@@ -107,8 +110,34 @@ const ProductDetailPage = () => {
     setQuantity((current) => (maxStock > 0 ? Math.min(current, maxStock) : 1))
   }, [maxStock])
 
+  /**
+   * True only when a *choice* is outstanding — `product.stock > 0` was never
+   * consulted, so this says nothing about availability. `inStock` is separate.
+   */
   const missingChoice = (requiresSize && !selectedSize) || (requiresColor && !selectedColor)
   const inStock = maxStock > 0
+
+  /*
+   * Both triggers funnel through here so the gate lives in exactly one place.
+   *
+   * "Add to cart" with a size/colour still outstanding opens the picker window
+   * instead of adding — the window asks for what's missing and the button in
+   * there calls straight back into this same function with the choice now made.
+   * Only once every required option has been chosen does it add on the spot.
+   *
+   * The alternative was to block the trigger and relabel it "Select a size",
+   * which is what this page used to do. It reads as a dead button, and it makes
+   * the customer satisfy a form before they're allowed to express intent. Both
+   * buttons are now always live, and the one thing that genuinely has to be
+   * answered — which variant — is answered in the window, once, for both paths.
+   */
+  const startAction = (mode) => {
+    if (missingChoice) {
+      setChoiceMode(mode)
+      return
+    }
+    addToCart(mode)
+  }
 
   const addToCart = async (mode) => {
     if (!product) return
@@ -136,7 +165,7 @@ const ProductDetailPage = () => {
       ).unwrap()
 
       if (mode === "buy") {
-        setBuyOpen(false)
+        setChoiceMode(null)
         navigate("/checkout")
       } else {
         toast.success(`${product.name} added to your cart`)
@@ -183,41 +212,30 @@ const ProductDetailPage = () => {
   const discount = getDiscount(product.price, product.originalPrice)
   const label = categoryLabel(product.category)
 
-  const actionLabel = missingChoice
-    ? requiresSize && !selectedSize
-      ? "Select a size"
-      : "Select a colour"
-    : !inStock
-      ? "Out of stock"
-      : "Add to cart"
-
-  const actionDisabled = missingChoice || !inStock
-
   const actions = (
     <>
+      {/*
+        Neither button is gated on the variant pickers any more. The only
+        genuine blocker is stock, which the API enforces regardless.
+      */}
       <Button
         size="lg"
         fullWidth
-        onClick={() => addToCart("add")}
-        disabled={actionDisabled}
+        onClick={() => startAction("add")}
+        disabled={!inStock}
         loading={pending === "add"}
         loadingText="Adding…"
         leftIcon={<ShoppingBag className="h-5 w-5" />}
       >
-        {actionLabel}
+        {inStock ? "Add to cart" : "Out of stock"}
       </Button>
 
-      {/*
-        Buy now is never gated on the inline pickers. It opens the confirmation
-        window instead, which asks for whatever is still missing — so a shopper
-        who taps it before choosing a size gets the pickers, not a dead button
-        and not a toast telling them off.
-      */}
       <Button
         variant="dark"
         size="lg"
         fullWidth
-        onClick={() => setBuyOpen(true)}
+        onClick={() => startAction("buy")}
+        disabled={!inStock}
         loading={pending === "buy"}
         loadingText="Just a moment…"
       >
@@ -442,15 +460,15 @@ const ProductDetailPage = () => {
 
           <Button
             size="lg"
-            onClick={() => addToCart("add")}
-            disabled={actionDisabled}
+            onClick={() => startAction("add")}
+            disabled={!inStock}
             loading={pending === "add"}
             loadingText="Adding…"
             tabIndex={actionsInView ? -1 : 0}
             leftIcon={<ShoppingBag className="h-5 w-5" />}
             className="shrink-0"
           >
-            {actionLabel}
+            {inStock ? "Add to cart" : "Out of stock"}
           </Button>
         </div>
       </div>
@@ -459,13 +477,23 @@ const ProductDetailPage = () => {
       <div aria-hidden="true" className="h-20 lg:hidden" />
 
       {/*
-        ── Buy-now window ───────────────────────────────────────
-        Edits the same `selectedColor` / `selectedSize` / `quantity` state the
-        inline pickers use, so confirming it can hand straight back to
-        addToCart("buy") — there's one add path and one set of variant rules,
-        rather than a second checkout route that could drift from it.
+        ── Variant window ───────────────────────────────────────
+        Serves both buttons, which is why its title tracks `choiceMode` rather
+        than being fixed. `startAction` opens it only when a size or colour is
+        still unchosen; if the customer already picked everything inline it
+        never appears and the action happens straight away.
+
+        It edits the same `selectedColor` / `selectedSize` / `quantity` state the
+        inline pickers use, so confirming hands straight back to addToCart with
+        the intent it was opened for — one add path and one set of variant
+        rules, rather than a second checkout route that could drift from it.
       */}
-      <Modal open={buyOpen} onClose={() => setBuyOpen(false)} size="md" title="Buy now">
+      <Modal
+        open={choiceMode !== null}
+        onClose={() => setChoiceMode(null)}
+        size="md"
+        title={choiceMode === "buy" ? "Buy now" : "Add to cart"}
+      >
         <div className="space-y-5">
           <div className="flex items-start justify-between gap-4">
             <p className="min-w-0 text-sm font-medium leading-snug text-gray-900">{product.name}</p>
@@ -497,16 +525,29 @@ const ProductDetailPage = () => {
           <StockLine missingChoice={missingChoice} inStock={inStock} maxStock={maxStock} />
         </div>
 
+        {/*
+          The one place the variant gate is allowed to bite. The triggers never
+          block, so this button is what tells the customer *why* the window is
+          open and stays inert until they've answered it — `addToCart` keeps its
+          guards as the last line of defence, but they're unreachable from here
+          because this button can't fire while `missingChoice` is true.
+        */}
         <Button
           size="lg"
           fullWidth
           className="mt-5"
-          onClick={() => addToCart("buy")}
-          disabled={actionDisabled}
-          loading={pending === "buy"}
-          loadingText="Just a moment…"
+          onClick={() => addToCart(choiceMode)}
+          disabled={missingChoice || !inStock}
+          loading={pending === choiceMode}
+          loadingText={choiceMode === "buy" ? "Just a moment…" : "Adding…"}
         >
-          {missingChoice ? actionLabel : "Confirm and check out"}
+          {requiresSize && !selectedSize
+            ? "Select a size"
+            : requiresColor && !selectedColor
+              ? "Select a colour"
+              : choiceMode === "buy"
+                ? "Confirm and check out"
+                : "Add to cart"}
         </Button>
       </Modal>
     </div>
@@ -568,15 +609,18 @@ const Specifications = ({ product }) => {
   )
 }
 
-/** One flat list — the two `h3` column headings it used to have were labelling
- *  four-line lists inside a tab that's already labelled "Delivery". */
+/**
+ * What's here is only what the three-line reassurance strip above the fold
+ * doesn't already say. "Free over ৳X" and "cash on delivery" both appear there
+ * within a screen of this tab, so repeating them under a "Delivery" heading was
+ * two statements of one fact. The rates, the 3-day window and the policy link
+ * stay — none of them are said anywhere else on the page.
+ */
 const ShippingInfo = () => (
   <div className="max-w-2xl">
     <ul className="space-y-2 text-sm text-gray-600">
       <li>Inside Dhaka — {formatPrice(SHIPPING.insideDhaka)}, 1–2 days.</li>
       <li>Outside Dhaka — {formatPrice(SHIPPING.outsideDhaka)}, 2–4 days.</li>
-      <li>Free over {formatPrice(SHIPPING.freeThreshold)}.</li>
-      <li>Cash on delivery nationwide.</li>
       <li>Check your parcel with the rider — damaged or wrong items are replaced free.</li>
       <li>Report an issue within 3 days. Cosmetics returnable unopened only.</li>
     </ul>
