@@ -18,6 +18,21 @@ import { StorefrontUIContext, useStorefrontUI } from "../../lib/storefrontUI"
 
 export { useStorefrontUI }
 
+/*
+ * The product detail page swaps the bottom nav for its own Add-to-cart / Buy-now
+ * bar. Two fixed bars stacked on a phone is a third of the screen gone, and on
+ * the one page whose entire job is buying, the buy actions win.
+ *
+ * Nothing becomes unreachable: the header is sticky and carries the wordmark,
+ * search and cart, and the page opens with breadcrumbs up to its category.
+ *
+ * Matched on the route rather than signalled from the page, because a flag the
+ * page raised on mount would leave the nav rendered for the first paint and
+ * then yank it out from under the content. `/products` — the shop grid — keeps
+ * its nav; only `/products/:id` is matched.
+ */
+const PRODUCT_DETAIL_ROUTE = /^\/products\/[^/]+\/?$/
+
 const StorefrontLayout = () => {
   const location = useLocation()
 
@@ -43,6 +58,8 @@ const StorefrontLayout = () => {
   const handleSearchClick = useCallback(() => setSearchOpen(true), [])
   const handleCartClick = useCallback(() => setCartOpen(true), [])
 
+  const hideBottomNav = PRODUCT_DETAIL_ROUTE.test(location.pathname)
+
   return (
     <StorefrontUIContext.Provider value={api}>
       <div className="flex min-h-screen flex-col bg-white">
@@ -51,6 +68,10 @@ const StorefrontLayout = () => {
         {/*
           `pb-bottom-nav` clears the fixed mobile bottom nav (4rem + iOS safe
           area). Removed from md up where the bottom nav is hidden.
+
+          It stays unconditional below md even on the product page, because the
+          buy bar that replaces the nav there is built to the same 4rem + safe
+          height — so one clearance rule covers whichever bar is showing.
         */}
         <main id="main-content" className="flex-1 pb-bottom-nav md:pb-0">
           <Outlet />
@@ -58,7 +79,7 @@ const StorefrontLayout = () => {
 
         <Footer />
 
-        <BottomNav onSearchClick={handleSearchClick} onCartClick={handleCartClick} />
+        {!hideBottomNav && <BottomNav onSearchClick={handleSearchClick} onCartClick={handleCartClick} />}
         <WhatsAppButton />
 
         <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />

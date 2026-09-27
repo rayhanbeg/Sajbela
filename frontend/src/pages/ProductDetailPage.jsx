@@ -373,9 +373,16 @@ const ProductDetailPage = () => {
             </div>
 
             {/* ── Actions ────────────────────────────────────── */}
-            <div ref={actionsRef} className="mt-6 flex flex-col gap-2.5 sm:flex-row">
-              {actions}
-            </div>
+            {/*
+              Hidden below md, where the fixed bar at the bottom of the screen
+              carries the same two actions and is always visible. Rendering both
+              would put the same pair of controls on screen twice, which is what
+              this page used to do — the bar was scroll-triggered and duplicated
+              these, so it needed an intersection observer, a `tabIndex` flip
+              and an `aria-hidden` flip to keep the offscreen copy out of the
+              tab order. One copy per breakpoint needs none of that.
+            */}
+            <div className="mt-6 hidden gap-2.5 md:flex">{actions}</div>
 
             {/* ── Combo contents ─────────────────────────────── */}
             {product.isCombo && product.comboItems?.length > 0 && (
