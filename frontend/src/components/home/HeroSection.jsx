@@ -21,38 +21,46 @@ import "swiper/css/pagination"
  * laid out horizontally — product on one side, price and CTA on the other — so
  * a horizontal crop cuts the message in half while a vertical one only trims
  * empty margin off the top and bottom. The ratios below therefore only ever get
- * *wider* as the viewport grows: 1.5 → 2.33 → 3.0.
+ * wider as the viewport grows: 1.78 → 2.0 → 2.33.
  *
- * That's also why the desktop side is capped with a height ceiling rather than
- * a wider ratio — see the FRAME note below.
- *
- * Upload target: 2400 × 1000 or anything wider than 3:2. Narrower than 3:2 and
- * phones start losing the left and right edges.
+ * Upload target: **2400 × 1200** (2:1). That's the middle rung, so it lands
+ * exactly at `sm`, loses about 11% off the sides on a phone and about 14% off
+ * the top and bottom on a desktop — the most balanced a single file can be
+ * across this ladder. Wider files give phones a harsher horizontal crop;
+ * narrower ones give desktops a harsher vertical one.
  */
 
 /**
- * Small screens keep the 3:2 ratio and nothing else — the phone frame is
- * exactly as it was.
+ * Three rungs, each sized for its own class of device.
  *
- * From md up the banner gets a height ceiling so it reads as a banner rather
- * than a full screen of picture. The ceiling is a `max-height` and not a wider
- * ratio, and that distinction is the whole point: raising the ratio (21/9 →
- * 3/1) would also *grow* the frame, so at 1536px wide it would want 512px — the
- * cap would never bite and the banner would be no shorter at all. A max-height
- * is applied after the ratio, so the box is width-first, full-bleed, and its
- * height stops at 544px however wide the monitor gets.
+ * Phones were the problem this ladder fixes. They used to hold 3:2 at every
+ * width below `md`, which put a 250px banner on a 375px phone and a 427px one
+ * at 640px — with the 64px header that was nearly half the screen before a
+ * single product. Widening the frame fixes it on both axes at once: 16/9 is
+ * both 16% shorter than 3:2 *and* a closer match to the uploaded file, so it
+ * crops less off the sides too (74% of the image width shown, against 63%).
+ * The 640px case improves most — 427px down to 320px.
  *
- * It only binds from about 1140px up. Below that the 2.33 box is already under
- * the ceiling and the two are identical, which is why tablets and small laptops
- * are unaffected. `object-cover` crops the extra off the top and bottom (see
- * the crop note above — vertical is the safe axis), and `object-center` splits
- * it evenly. Widening the ratio instead would have cropped horizontally, which
- * is the one axis that cuts the banner's message in half.
+ * From `md` the frame is 21:9, and from `lg` it also takes a height ceiling.
+ * The ceiling is a `max-height` and not a wider ratio, and that distinction is
+ * the point: raising the ratio would also *grow* the frame, so at 1536px wide a
+ * 3:1 box wants 512px and a 544px cap would never bite. A max-height is applied
+ * after the ratio, so the box stays width-first and full-bleed while its height
+ * stops at 544px however wide the monitor gets. It only starts binding around
+ * 1270px, which is why laptops are unaffected.
+ *
+ * `max-h-[70svh]` is the landscape guard. Ratio alone is a function of width,
+ * so a phone turned sideways — 844px wide, 390px tall — would ask for a 475px
+ * banner and cover the entire screen. Capping at 70% of the small viewport
+ * height stops that without touching the portrait case, where the ratio's
+ * height is far below the cap and this class does nothing. `svh` rather than
+ * `dvh` so the cap doesn't reflow as the URL bar hides; browsers too old to
+ * know the unit drop the declaration and simply get the ratio, as before.
  *
  * Because the skeleton reuses this same class string, the reserved box still
  * matches the rendered one exactly — no layout shift.
  */
-const FRAME = "aspect-[3/2] w-full md:aspect-[21/9] md:max-h-[34rem]"
+const FRAME = "aspect-[16/9] w-full max-h-[70svh] sm:aspect-[2/1] md:aspect-[21/9] lg:max-h-[34rem]"
 
 const PAGINATION_STYLES = [
   "[&_.swiper-pagination]:!bottom-3",
