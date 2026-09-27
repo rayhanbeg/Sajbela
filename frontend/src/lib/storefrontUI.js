@@ -7,10 +7,11 @@ import { createContext, useContext } from "react"
  *   const { openCart } = useStorefrontUI()
  *   await addToCart(...); openCart()
  *
- * It lives here rather than in StorefrontLayout so that leaf components like
- * ProductCard can consume it without importing the entire layout module —
- * ProductCard is rendered *inside* the cart drawer's sibling tree, and pulling
- * the layout in from a card is how you get a circular import.
+ * It lives here rather than in StorefrontLayout so that components rendered
+ * deep inside the tree can consume it without importing the entire layout
+ * module. The product detail page is the current consumer: it sits *inside* the
+ * layout that owns the cart drawer, and reaching for the layout from a page it
+ * renders is how you get a circular import.
  */
 
 export const StorefrontUIContext = createContext(null)

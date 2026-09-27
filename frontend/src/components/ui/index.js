@@ -26,7 +26,7 @@ export { default as Price, getDiscount } from "./Price"
 export { default as Rating, RatingInput } from "./Rating"
 export { default as QuantityStepper } from "./QuantityStepper"
 
-export { default as Skeleton, SkeletonText, SkeletonProductCard, SkeletonProductGrid } from "./Skeleton"
+export { default as Skeleton, SkeletonText, SkeletonProductCard } from "./Skeleton"
 export { default as EmptyState } from "./EmptyState"
 export { default as ErrorState } from "./ErrorState"
 

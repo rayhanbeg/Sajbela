@@ -46,16 +46,14 @@ export const SkeletonProductCard = ({ className }) => (
   </div>
 )
 
-/** Grid of product placeholders matching the shop grid's column counts. */
-export const SkeletonProductGrid = ({ count = 12, className }) => (
-  <div
-    className={cn("grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:gap-5 xl:grid-cols-4", className)}
-    aria-hidden="true"
-  >
-    {Array.from({ length: count }).map((_, i) => (
-      <SkeletonProductCard key={i} />
-    ))}
-  </div>
-)
+/*
+ * There used to be a SkeletonProductGrid here that wrapped the card above in
+ * its own copy of the shop grid's class string. Nothing imported it, and its
+ * columns had already drifted from the two real grids — `xl:grid-cols-4` where
+ * both of them break at `lg`. A placeholder grid that doesn't match the grid it
+ * stands in for introduces exactly the layout shift a skeleton exists to
+ * prevent, so the callers own their own grid classes and pass them to the same
+ * card placeholder instead.
+ */
 
 export default Skeleton

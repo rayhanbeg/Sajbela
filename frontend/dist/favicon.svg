@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Favicon. index.html pointed at /vite.svg, which 404'd for the same
-       reason as the placeholder — no public/ directory existed. pink-600. -->
-  <rect width="64" height="64" rx="14" fill="#db2777"/>
-  <text x="32" y="45" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
-        font-size="38" font-weight="700" fill="#ffffff">S</text>
-</svg>
