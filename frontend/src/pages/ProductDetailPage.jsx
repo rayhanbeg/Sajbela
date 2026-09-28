@@ -8,7 +8,6 @@ import { clearCurrentProduct, fetchProductById } from "../lib/store/productSlice
 import { categoryLabel, categoryPath, SHIPPING } from "../lib/navigation"
 import { formatPrice } from "../lib/utils"
 import { cn } from "../lib/cn"
-import { useInView } from "../lib/hooks"
 import { useStorefrontUI } from "../lib/storefrontUI"
 import ProductGallery from "../components/products/ProductGallery"
 import { ColorPicker, SizePicker } from "../components/products/VariantPicker"
@@ -39,7 +38,8 @@ import {
  *    out and picking one is a single tap
  *  - `alert()` × 6 became toasts, and a successful add opens the cart drawer
  *  - the gallery gained thumbnails, keyboard nav, hover zoom and a lightbox
- *  - a sticky buy bar appears on mobile once the inline buttons scroll away
+ *  - on phones the buy actions moved into a fixed bar at the bottom of the
+ *    screen, which the layout swaps in for the bottom nav on this route
  *  - adding to cart no longer requires an account. It used to stash the chosen
  *    size/colour under `pendingProductSelection`, redirect to /auth/register,
  *    and replay the add on return — a signup wall in front of the cart, with a
@@ -77,10 +77,6 @@ const ProductDetailPage = () => {
   // It carries the intent rather than a boolean, so one window serves both
   // buttons and its confirm button knows what to do when it closes.
   const [choiceMode, setChoiceMode] = useState(null) // "add" | "buy" | null
-
-  // Watches the inline action row so the mobile buy bar only appears once
-  // you've scrolled past it — a bar that's always there is just clutter.
-  const [actionsRef, actionsInView] = useInView({ once: false, rootMargin: "0px", threshold: 0 })
 
   useEffect(() => {
     if (id) dispatch(fetchProductById(id))
@@ -446,42 +442,68 @@ const ProductDetailPage = () => {
         className="bg-gray-50"
       />
 
-      {/* ── Mobile buy bar ───────────────────────────────────── */}
+      {/*
+        ── Mobile buy bar ───────────────────────────────────────
+        This is the bottom nav's replacement on this route, not a second bar
+        stacked on top of it — StorefrontLayout drops the nav for /products/:id.
+        So it mirrors the nav exactly: same `md:hidden` breakpoint, same
+        `z-bottom-nav` layer (below the drawer and modal layers, so the cart and
+        the variant window still cover it), and the same 4rem + safe-area
+        height, which is what lets <main>'s existing `pb-bottom-nav` clear
+        whichever of the two bars is on screen.
+
+        Always visible, never scroll-triggered. The old bar slid in once the
+        inline buttons scrolled away, which was the right call when it was a
+        second control on top of the nav — but with the nav gone, a bar that
+        waits for a scroll leaves the bottom of the screen empty on arrival,
+        having taken the navigation away and put nothing in its place.
+
+        Height maths: pt-2.5 (0.625rem) + h-11 button (2.75rem) + the same
+        0.625rem of bottom padding = 4rem, plus the inset. The buttons are
+        `size="md"` rather than "lg" deliberately — `lg` is px-6, and two of
+        those plus a spinner overflow a 360px screen. Padding can't be
+        overridden through `className` either: cn() has no tailwind-merge and
+        Tailwind emits .px-4 before .px-6, so the size's own padding would win.
+      */}
       <div
         className={cn(
-          "fixed inset-x-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-nav backdrop-blur-lg",
-          "transition-transform duration-300 ease-out-expo lg:hidden",
-          // Parks itself directly above the bottom nav rather than over it.
-          "bottom-[calc(4rem+env(safe-area-inset-bottom,0px))]",
-          actionsInView ? "translate-y-[150%]" : "translate-y-0",
+          "fixed inset-x-0 bottom-0 z-bottom-nav md:hidden",
+          "border-t border-gray-200 bg-white/95 shadow-nav backdrop-blur-lg",
+          "px-3 pt-2.5",
+          "pb-[calc(0.625rem+env(safe-area-inset-bottom,0px))]",
         )}
-        // Hidden from assistive tech while off-screen — the inline buttons it
-        // duplicates are the ones in view.
-        aria-hidden={actionsInView}
       >
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-gray-600">{product.name}</p>
-            <Price price={product.price} originalPrice={product.originalPrice} size="md" showBadge={false} />
+        {inStock ? (
+          <div className="flex items-center gap-2">
+            <Button
+              size="md"
+              fullWidth
+              onClick={() => startAction("add")}
+              loading={pending === "add"}
+              loadingText="Adding…"
+            >
+              Add to cart
+            </Button>
+
+            <Button
+              variant="dark"
+              size="md"
+              fullWidth
+              onClick={() => startAction("buy")}
+              loading={pending === "buy"}
+              loadingText="Wait…"
+            >
+              Buy now
+            </Button>
           </div>
-
-          <Button
-            size="lg"
-            onClick={() => startAction("add")}
-            disabled={!inStock}
-            loading={pending === "add"}
-            loadingText="Adding…"
-            tabIndex={actionsInView ? -1 : 0}
-            leftIcon={<ShoppingBag className="h-5 w-5" />}
-            className="shrink-0"
-          >
-            {inStock ? "Add to cart" : "Out of stock"}
+        ) : (
+          /* One dead button rather than two — nothing here is actionable, so
+             splitting it in half only makes the message smaller. */
+          <Button size="md" fullWidth disabled>
+            Out of stock
           </Button>
-        </div>
+        )}
       </div>
-
-      {/* Clears the buy bar so the reassurance list isn't sitting under it. */}
-      <div aria-hidden="true" className="h-20 lg:hidden" />
 
       {/*
         ── Variant window ───────────────────────────────────────

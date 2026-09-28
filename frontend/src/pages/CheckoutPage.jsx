@@ -17,7 +17,7 @@ import {
 
 import { addressesAPI, ordersAPI } from "../lib/api"
 import { cn } from "../lib/cn"
-import { formatPrice, validatePhone } from "../lib/utils"
+import { formatPrice, normalizePhone, validatePhone } from "../lib/utils"
 import { DISTRICTS } from "../lib/districts"
 import { SHIPPING } from "../lib/navigation"
 import { cartTotals, readCartItem, totalItemCount, variantLabel } from "../lib/cart"
@@ -65,12 +65,31 @@ const EMPTY_FORM = { fullName: "", email: "", phone: "", address: "", district: 
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
+/**
+ * Field labels, so a failed submit can name what's wrong instead of pointing at
+ * "the highlighted fields" — which is only useful if the highlight is on screen,
+ * and on a phone the field it means is usually several scrolls above the button
+ * that reported it. Keyed and ordered to match `validate` below, which in turn
+ * matches the order the fields appear in.
+ */
+const FIELD_LABELS = {
+  fullName: "your name",
+  phone: "phone number",
+  email: "email",
+  address: "address",
+  district: "district",
+  thana: "thana",
+}
+
 function validate(form, { requireEmail }) {
   const errors = {}
 
   if (!form.fullName.trim()) errors.fullName = "Enter your name"
   if (!form.phone.trim()) errors.phone = "Enter a phone number"
-  else if (!validatePhone(form.phone.replace(/\s+/g, ""))) errors.phone = "Enter a valid number"
+  // Normalised first, so `+880 1712-345678` and `8801712345678` are accepted as
+  // the same number they are rather than rejected for their punctuation.
+  else if (!validatePhone(normalizePhone(form.phone)))
+    errors.phone = "Enter an 11-digit number starting with 01"
 
   // Only guests are asked: a signed-in shopper's confirmation goes to the
   // address on their account.
@@ -160,6 +179,19 @@ const CheckoutPage = () => {
     setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))
   }
 
+  /**
+   * Rewrites the phone field into the shape the order will carry, the moment the
+   * shopper leaves it. Doing it on blur rather than only on submit means a
+   * `+880` number visibly becomes `01…` in front of them — the field corrects
+   * itself instead of waiting to accuse them of getting it wrong.
+   */
+  const normalizePhoneField = () => {
+    setForm((prev) => {
+      const next = normalizePhone(prev.phone)
+      return next === prev.phone ? prev : { ...prev, phone: next }
+    })
+  }
+
   const orderItems = useMemo(
     () =>
       lines.map((item) => {
@@ -183,15 +215,28 @@ const CheckoutPage = () => {
     const found = validate(form, { requireEmail: !isAuthenticated })
     setErrors(found)
 
-    if (Object.keys(found).length > 0) {
-      setSubmitError("Please fix the highlighted fields.")
-      // Move focus to the first problem rather than leaving the shopper to hunt.
-      document.getElementById(`checkout-${Object.keys(found)[0]}`)?.focus()
+    const bad = Object.keys(found)
+    if (bad.length > 0) {
+      // Names the fields rather than saying "the highlighted fields" — the
+      // highlight is often off screen from the button that reported it.
+      setSubmitError(`Check ${bad.map((key) => FIELD_LABELS[key]).join(", ")}.`)
+
+      // Centre the first problem rather than leaving the shopper to hunt.
+      // `block: "center"` matters: the default lands the field directly under
+      // the sticky header, and focus()'s own scroll does the same — hence
+      // `preventScroll`, so the two don't fight.
+      const field = document.getElementById(`checkout-${bad[0]}`)
+      if (field) {
+        field.scrollIntoView({ behavior: "smooth", block: "center" })
+        field.focus({ preventScroll: true })
+      }
       return
     }
 
     setSubmitting(true)
     setSubmitError("")
+
+    const phone = normalizePhone(form.phone)
 
     try {
       const response = await ordersAPI.create({
@@ -202,7 +247,7 @@ const CheckoutPage = () => {
           district: form.district,
           thana: form.thana.trim(),
           country: "Bangladesh",
-          phone: form.phone.replace(/\s+/g, ""),
+          phone,
         },
         // Ignored by the server when the request carries a token.
         ...(isAuthenticated
@@ -211,7 +256,7 @@ const CheckoutPage = () => {
               guestInfo: {
                 name: form.fullName.trim(),
                 email: form.email.trim(),
-                phone: form.phone.replace(/\s+/g, ""),
+                phone,
               },
             }),
         paymentMethod,
@@ -233,7 +278,7 @@ const CheckoutPage = () => {
             address: form.address.trim(),
             district: form.district,
             thana: form.thana.trim(),
-            phone: form.phone.replace(/\s+/g, ""),
+            phone,
             country: "Bangladesh",
             isDefault: true,
           })
@@ -288,7 +333,16 @@ const CheckoutPage = () => {
     <div className="bg-gray-50">
       <CheckoutHeader />
 
-      <form onSubmit={handleSubmit} noValidate className="page-container pb-8 pt-4 md:pb-14">
+      {/*
+        Bottom padding clears the fixed submit bar, which is 4.5rem + safe area
+        and grows by a line when it's showing an error.
+
+        Three values because the clearance it's topping up changes twice: below
+        md the layout's own `pb-bottom-nav` already covers 4rem of it, from md
+        that's dropped and the whole bar has to be paid for here, and from lg the
+        bar is gone entirely and this is just page-bottom space.
+      */}
+      <form onSubmit={handleSubmit} noValidate className="page-container pb-8 pt-4 md:pb-32 lg:pb-14">
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_23rem] lg:gap-8">
           {/* ── Left: details ──────────────────────────────── */}
           <div className="space-y-5 md:space-y-6">
@@ -298,7 +352,7 @@ const CheckoutPage = () => {
               rather than a wall in front of the purchase.
             */}
             {!isAuthenticated && (
-              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-card border border-gray-100 bg-white px-5 py-3.5 shadow-card">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-card border border-gray-100 bg-white px-4 py-3.5 shadow-card sm:px-5">
                 <p className="text-sm font-medium text-gray-900">Checking out as a guest</p>
                 <Button to="/auth/login?returnTo=%2Fcheckout" variant="outline" size="sm">
                   Sign in
@@ -333,9 +387,10 @@ const CheckoutPage = () => {
                       {...field}
                       size="lg"
                       type="tel"
-                      inputMode="numeric"
+                      inputMode="tel"
                       value={form.phone}
                       onChange={update("phone")}
+                      onBlur={normalizePhoneField}
                       autoComplete="tel"
                       placeholder="01712345678"
                     />
@@ -484,7 +539,7 @@ const CheckoutPage = () => {
           {/* ── Right: summary ─────────────────────────────── */}
           <aside className="lg:sticky lg:top-24">
             <div className="overflow-hidden rounded-card border border-gray-100 bg-white shadow-card">
-              <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+              <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3.5 sm:px-5 sm:py-4">
                 <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
                   <Package aria-hidden="true" className="h-4 w-4 text-pink-600" />
                   Your order
@@ -494,13 +549,20 @@ const CheckoutPage = () => {
                 </Button>
               </div>
 
-              <ul className="max-h-72 divide-y divide-gray-100 overflow-y-auto">
+              {/*
+                Capped and scrollable only from lg, where the whole card is
+                sticky and has a viewport to stay inside. Below that it was a
+                scroll area nested in the page — a phone has no way to tell the
+                two apart, so a drag meant to move the page would silently move
+                the item list instead, and a long order hid its own last lines.
+              */}
+              <ul className="divide-y divide-gray-100 lg:max-h-72 lg:overflow-y-auto">
                 {lines.map((item) => {
                   const line = readCartItem(item)
                   const variant = variantLabel(item)
 
                   return (
-                    <li key={line.id} className="flex items-center gap-3 px-5 py-3">
+                    <li key={line.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
                       <Image
                         src={line.image}
                         alt=""
@@ -526,7 +588,7 @@ const CheckoutPage = () => {
                 })}
               </ul>
 
-              <dl className="space-y-2.5 border-t border-gray-100 p-5 text-sm">
+              <dl className="space-y-2.5 border-t border-gray-100 p-4 text-sm sm:p-5">
                 <div className="flex items-baseline justify-between gap-4">
                   <dt className="text-gray-600">
                     Subtotal <span className="text-gray-400">({count} {count === 1 ? "item" : "items"})</span>
@@ -556,7 +618,7 @@ const CheckoutPage = () => {
                 )}
               </dl>
 
-              <ul className="space-y-2 border-t border-gray-100 px-5 py-4 text-xs text-gray-600">
+              <ul className="space-y-2 border-t border-gray-100 px-4 py-4 text-xs text-gray-600 sm:px-5">
                 <li className="flex items-center gap-2">
                   <ShieldCheck aria-hidden="true" className="h-4 w-4 shrink-0 text-green-600" />
                   Pay on delivery
@@ -570,8 +632,25 @@ const CheckoutPage = () => {
           </aside>
         </div>
 
-        {/* ── Mobile submit bar ──────────────────────────────── */}
-        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-40 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-nav backdrop-blur-lg lg:hidden">
+        {/*
+          ── Mobile submit bar ───────────────────────────────────
+          Sits flush to the bottom because the layout drops the bottom nav on
+          this route (see OWN_BOTTOM_BAR). It used to be offset by 4rem to clear
+          that nav, which was right below md and wrong from md to lg — the nav is
+          `md:hidden` but this bar is `lg:hidden`, so on a tablet it floated with
+          a 4rem strip of page scrolling past underneath it.
+
+          `z-bottom-nav` rather than a bare z-40: it's standing in for the nav,
+          so it belongs on the nav's layer, under the drawer and toast layers.
+        */}
+        <div
+          className={cn(
+            "fixed inset-x-0 bottom-0 z-bottom-nav lg:hidden",
+            "border-t border-gray-200 bg-white/95 shadow-nav backdrop-blur-lg",
+            "px-4 pt-3",
+            "pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]",
+          )}
+        >
           {submitError && (
             <p role="alert" className="mb-2 flex items-start gap-1.5 text-xs font-medium text-red-600">
               <AlertCircle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
@@ -584,12 +663,11 @@ const CheckoutPage = () => {
               <p className="text-[0.6875rem] uppercase tracking-wide text-gray-500">Total</p>
               <p className="text-lg font-bold leading-tight text-gray-900 tabular-nums">{formatPrice(totals.total)}</p>
             </div>
-            <Button type="submit" size="lg" loading={submitting} className="ml-auto flex-1">
+            <Button type="submit" size="lg" loading={submitting} className="flex-1">
               Place order
             </Button>
           </div>
         </div>
-        <div aria-hidden="true" className="h-24 lg:hidden" />
       </form>
     </div>
   )
@@ -605,19 +683,33 @@ const CheckoutHeader = () => (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-gray-900 md:text-2xl">Checkout</h1>
 
-        <Button to="/cart" variant="ghost" size="sm" className="text-gray-500">
-          <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-          Back to cart
-        </Button>
+        {/*
+          Dropped on phones, where it was the third route back to the cart in
+          one header — the breadcrumb above it and the summary's Edit link do
+          the same job, and neither costs a row of a 360px screen.
+        */}
+        <div className="hidden sm:block">
+          <Button to="/cart" variant="ghost" size="sm" className="text-gray-500">
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+            Back to cart
+          </Button>
+        </div>
       </div>
     </div>
   </div>
 )
 
-/** One titled section of the form. */
+/**
+ * One titled section of the form.
+ *
+ * Padding steps up at sm. A 20px inset inside a card inside the page container
+ * leaves 286px of field on a 360px phone; dropping to 16px below sm buys back
+ * 8px a side, which is the difference between "01712345678" sitting comfortably
+ * in the field and touching its edge.
+ */
 const Panel = ({ icon, title, step, children }) => (
   <section className="overflow-hidden rounded-card border border-gray-100 bg-white shadow-card">
-    <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-4">
+    <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-3.5 sm:px-5 sm:py-4">
       <span
         aria-hidden="true"
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pink-50 text-pink-600 [&_svg]:h-[1.125rem] [&_svg]:w-[1.125rem]"
@@ -631,7 +723,7 @@ const Panel = ({ icon, title, step, children }) => (
       </h2>
     </div>
 
-    <div className="p-5">{children}</div>
+    <div className="p-4 sm:p-5">{children}</div>
   </section>
 )
 
