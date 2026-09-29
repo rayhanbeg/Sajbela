@@ -53,7 +53,15 @@ const OptionRow = ({ name, value, checked, onSelect, children }) => (
   </label>
 )
 
-const ProductFilters = ({ filters, onChange, onClear, lockedKeys = [], showClear = true, className }) => {
+const ProductFilters = ({
+  filters,
+  onChange,
+  onClear,
+  lockedKeys = [],
+  heading = false,
+  showClear = true,
+  className,
+}) => {
   // Custom price inputs are local until submitted — firing a request on every
   // keystroke of "1500" would issue four queries and three empty result flashes.
   const [minPrice, setMinPrice] = useState(filters.minPrice || "")
@@ -75,21 +83,31 @@ const ProductFilters = ({ filters, onChange, onClear, lockedKeys = [], showClear
 
   return (
     <div className={cn("flex flex-col", className)}>
-      {showClear && (
-        <div className="flex items-center justify-between gap-3 pb-4">
-          <h2 className="text-base font-semibold text-gray-900">Filters</h2>
-          <button
-            type="button"
-            onClick={onClear}
-            className={cn(
-              "inline-flex items-center gap-1 rounded text-sm font-medium text-pink-600",
-              "transition-colors hover:text-pink-700",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
-            )}
-          >
-            <X aria-hidden="true" className="h-3.5 w-3.5" />
-            Clear all
-          </button>
+      {/*
+        The panel only titles itself when it's a sidebar. In the drawer the
+        sheet's own "Filters" header is directly above it, and rendering both
+        put the same word on screen twice, one line apart — so `heading` is off
+        by default and the sidebar opts in. "Clear all" is independent of it and
+        hangs right either way.
+      */}
+      {(heading || showClear) && (
+        <div className="flex min-h-[1.75rem] items-center gap-3 pb-4">
+          {heading && <h2 className="text-base font-semibold text-gray-900">Filters</h2>}
+
+          {showClear && (
+            <button
+              type="button"
+              onClick={onClear}
+              className={cn(
+                "ml-auto inline-flex items-center gap-1 rounded text-sm font-medium text-pink-600",
+                "transition-colors hover:text-pink-700",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
+              )}
+            >
+              <X aria-hidden="true" className="h-3.5 w-3.5" />
+              Clear all
+            </button>
+          )}
         </div>
       )}
 

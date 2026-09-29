@@ -1,47 +1,92 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
+/*
+ * There is one body, so there is one lock — held by a module-level counter
+ * rather than by each overlay individually.
+ *
+ * Every overlay used to snapshot `body.style` on open and write it back on
+ * close, which is correct only while exactly one is ever open. Two overlapping
+ * locks and the inner one snapshots the outer one's `overflow: hidden` /
+ * `position: fixed` as if that were the page's resting state — so whichever
+ * releases last puts the lock *back on*, with no overlay left on screen to
+ * explain it.
+ *
+ * That overlap was reachable: the variant window on a product page called
+ * `openCart()` without closing itself, leaving a drawer locked on top of a
+ * modal that was also locked. The window closes itself now, so the two no
+ * longer stack, but the release order was never something the overlays could
+ * guarantee between them — a page-owned overlay unmounts on navigation while a
+ * layout-owned one closes an effect later, which is the wrong order.
+ *
+ * Counting removes the ordering requirement: the first one in takes the
+ * snapshot, the last one out puts it back, whoever that turns out to be.
+ */
+let lockDepth = 0
+let lockedState = null
+
 /**
  * Locks body scroll while an overlay is open.
  *
  * Compensates for the disappearing scrollbar with padding so the page doesn't
  * visibly jump on desktop, and pins `position: fixed` on iOS where
  * `overflow: hidden` alone doesn't stop the body scrolling behind a modal.
+ *
+ * Safe to nest — see the note above.
  */
 export function useScrollLock(locked) {
   useEffect(() => {
     if (!locked) return
 
     const { body, documentElement } = document
-    const scrollY = window.scrollY
-    const scrollBarWidth = window.innerWidth - documentElement.clientWidth
 
-    const previous = {
-      overflow: body.style.overflow,
-      paddingRight: body.style.paddingRight,
-      position: body.style.position,
-      top: body.style.top,
-      width: body.style.width,
+    if (lockDepth === 0) {
+      const scrollY = window.scrollY
+      const scrollBarWidth = window.innerWidth - documentElement.clientWidth
+      const isTouch = "ontouchstart" in window
+
+      lockedState = {
+        overflow: body.style.overflow,
+        paddingRight: body.style.paddingRight,
+        position: body.style.position,
+        top: body.style.top,
+        width: body.style.width,
+        scrollY,
+        isTouch,
+        // Where we were when the lock went on. If an overlay navigates before
+        // it closes, restoring the old offset would drop the shopper into the
+        // middle of a page they've never seen — so the scroll is only put back
+        // if we're still on the page it was taken from.
+        pathname: window.location.pathname,
+      }
+
+      body.style.overflow = "hidden"
+      if (scrollBarWidth > 0) body.style.paddingRight = `${scrollBarWidth}px`
+
+      if (isTouch) {
+        body.style.position = "fixed"
+        body.style.top = `-${scrollY}px`
+        body.style.width = "100%"
+      }
     }
 
-    const isTouch = typeof window !== "undefined" && "ontouchstart" in window
-
-    body.style.overflow = "hidden"
-    if (scrollBarWidth > 0) body.style.paddingRight = `${scrollBarWidth}px`
-
-    if (isTouch) {
-      body.style.position = "fixed"
-      body.style.top = `-${scrollY}px`
-      body.style.width = "100%"
-    }
+    lockDepth += 1
 
     return () => {
-      body.style.overflow = previous.overflow
-      body.style.paddingRight = previous.paddingRight
-      body.style.position = previous.position
-      body.style.top = previous.top
-      body.style.width = previous.width
+      lockDepth = Math.max(0, lockDepth - 1)
+      if (lockDepth > 0 || !lockedState) return
 
-      if (isTouch) window.scrollTo(0, scrollY)
+      const state = lockedState
+      lockedState = null
+
+      body.style.overflow = state.overflow
+      body.style.paddingRight = state.paddingRight
+      body.style.position = state.position
+      body.style.top = state.top
+      body.style.width = state.width
+
+      if (state.isTouch && window.location.pathname === state.pathname) {
+        window.scrollTo(0, state.scrollY)
+      }
     }
   }, [locked])
 }

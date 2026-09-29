@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
-import { Mail, MailCheck } from "lucide-react"
+import { MailCheck } from "lucide-react"
 
 import { authAPI } from "../../lib/api"
 import { validateEmail } from "../../lib/utils"
@@ -185,7 +185,6 @@ const ForgotPasswordPage = () => {
               autoComplete="email"
               inputMode="email"
               autoFocus
-              leftIcon={<Mail />}
               placeholder="you@example.com"
               value={email}
               onChange={(event) => {

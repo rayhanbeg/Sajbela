@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
-import { Mail, Phone, User } from "lucide-react"
 
 import { clearError, googleLogin, registerUser } from "../../lib/store/authSlice"
 import { validateEmail, validatePhone } from "../../lib/utils"
@@ -29,6 +28,11 @@ import { Button, FormField, Input } from "../../components/ui"
  *  - The terms checkbox. Consent is now a sentence under the submit button,
  *    which is where Google, Shopify and Stripe put it. Same agreement, one
  *    less required interaction and one less error state in the form.
+ *
+ * The left-gutter icons went with them. Four fields each carrying a glyph, a
+ * label and a placeholder is the same fact stated three times, and the stack of
+ * little grey marks down the side of the form read as a column of its own —
+ * which is a lot of structure for what is four lines of text entry.
  */
 
 const EMPTY = { name: "", email: "", phone: "", password: "" }
@@ -134,7 +138,6 @@ const RegisterPage = () => {
               {...field}
               size="lg"
               autoComplete="name"
-              leftIcon={<User />}
               value={form.name}
               onChange={update("name")}
             />
@@ -149,7 +152,6 @@ const RegisterPage = () => {
               size="lg"
               autoComplete="email"
               inputMode="email"
-              leftIcon={<Mail />}
               placeholder="you@example.com"
               value={form.email}
               onChange={update("email")}
@@ -166,7 +168,6 @@ const RegisterPage = () => {
               autoComplete="tel"
               inputMode="numeric"
               maxLength={11}
-              leftIcon={<Phone />}
               placeholder="01XXXXXXXXX"
               value={form.phone}
               onChange={updatePhone}

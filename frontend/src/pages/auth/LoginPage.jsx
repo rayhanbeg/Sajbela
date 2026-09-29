@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
-import { Mail } from "lucide-react"
 
 import { clearError, googleLogin, loginUser } from "../../lib/store/authSlice"
 import { validateEmail } from "../../lib/utils"
@@ -22,6 +21,10 @@ import { Button, FormField, Input } from "../../components/ui"
  *    browser's `required` bubble plus one red bar at the top of the card.
  *  - `?expired=1` (set by the axios 401 interceptor) explains *why* the shopper
  *    is suddenly looking at a login form.
+ *  - The field icons are gone. Every input had a glyph in its left gutter on
+ *    top of a label above it and a placeholder inside it, which is the same
+ *    information three times — and the glyph was the only one of the three that
+ *    couldn't say anything a shopper didn't already know from the label.
  */
 
 const LoginPage = () => {
@@ -105,7 +108,6 @@ const LoginPage = () => {
               size="lg"
               autoComplete="email"
               inputMode="email"
-              leftIcon={<Mail />}
               placeholder="you@example.com"
               value={form.email}
               onChange={update("email")}

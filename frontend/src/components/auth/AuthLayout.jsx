@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom"
-import { ArrowLeft } from "lucide-react"
 import { cn } from "../../lib/cn"
 import { STORE } from "../../lib/navigation"
 
@@ -10,8 +9,26 @@ import { STORE } from "../../lib/navigation"
  * max-w-7xl ... flex items-center justify-center min-h-[80vh]` wrapper and
  * their own heading block, which is why they didn't line up: one centred on
  * 80vh, one on the full page, and the card padding differed. One shell here
- * means the wordmark, card and footer sit in exactly the same place as you move
+ * means the wordmark, form and footer sit in exactly the same place as you move
  * between sign in, sign up and password reset — no jump.
+ *
+ * ── The card only exists above sm ─────────────────────────────────────────
+ *
+ * A card is a way of saying "this is a separate thing from the page around it".
+ * On a phone there is no page around it — the form is the whole screen — so the
+ * border, the shadow and the grey backdrop were drawing a box around the
+ * viewport and then insetting the fields 24px from it for no reason. Below sm
+ * it's now just a form on white, which is both calmer and 48px wider: on a
+ * 360px screen that's the difference between a comfortable field and a cramped
+ * one.
+ *
+ * From sm up there genuinely is a page around it, so the card comes back — a
+ * hairline and a radius, no shadow. The lift was doing the same job as the
+ * whitespace already surrounding it.
+ *
+ * The height budget is the shell's, not the viewport's: 4rem of sticky header
+ * always, plus 4rem of mobile bottom nav below md. Centring on a plain 100vh
+ * pushed the card down by half the nav and left the footer link under it.
  */
 
 const WIDTHS = {
@@ -20,37 +37,41 @@ const WIDTHS = {
 }
 
 const AuthLayout = ({ title, description, notice, width = "md", children, footer }) => (
-  <div className="flex min-h-[calc(100vh-4rem)] flex-col justify-center bg-gray-50 px-4 py-10">
+  <div
+    className={cn(
+      "flex flex-col justify-center bg-white px-5 py-8",
+      "min-h-[calc(100dvh-8rem)] md:min-h-[calc(100dvh-4rem)]",
+      "sm:bg-gray-50 sm:px-6 sm:py-12",
+    )}
+  >
     <div className={cn("mx-auto w-full", WIDTHS[width] || WIDTHS.md)}>
       {/*
         One brand element, not three. This used to stack a 4xl serif wordmark
         above the card and a "← Back to store" link below it, on top of the
-        card's own <h1> — so a sign-in screen opened with three competing
-        headings. The wordmark is the link home now, at a size that doesn't
-        outrank the thing you came here to do.
+        form's own <h1> — so a sign-in screen opened with three competing
+        headings. The wordmark is the link home now, without the back arrow
+        that was restating what a logo already does.
       */}
-      <div className="mb-6 text-center">
+      <div className="mb-8 text-center sm:mb-6">
         <Link
           to="/"
-          className="inline-flex items-center gap-1.5 rounded text-sm text-gray-500 transition-colors hover:text-pink-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2"
+          className="rounded font-serif text-lg font-bold text-pink-600 transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2"
         >
-          <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-          <span className="font-serif text-base font-bold text-pink-600">{STORE.name}</span>
+          {STORE.name}
         </Link>
       </div>
 
-      <div className="rounded-card border border-gray-100 bg-white p-6 shadow-card sm:p-8">
-        <div className="mb-6">
-          <h1 className="text-xl font-bold tracking-tight text-gray-900">{title}</h1>
-          {description && <p className="mt-1 text-sm text-gray-600">{description}</p>}
+      <div className="sm:rounded-card sm:border sm:border-gray-200 sm:bg-white sm:p-8">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-xl">{title}</h1>
+        {description && <p className="mt-1.5 text-sm text-gray-600">{description}</p>}
+
+        <div className="mt-6">
+          {notice}
+          {children}
         </div>
-
-        {notice}
-
-        {children}
       </div>
 
-      {footer && <div className="mt-5 text-center text-sm text-gray-600">{footer}</div>}
+      {footer && <p className="mt-6 text-center text-sm text-gray-600">{footer}</p>}
     </div>
   </div>
 )

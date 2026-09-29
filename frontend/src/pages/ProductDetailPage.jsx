@@ -183,8 +183,20 @@ const ProductDetailPage = () => {
         }),
       ).unwrap()
 
+      /*
+       * The window has done its job, so it closes itself — before the cart
+       * drawer or the checkout route arrives, not after.
+       *
+       * It used to stay open on the "add" path, which left the drawer sliding
+       * up over a dialog that was still asking a question that had already
+       * been answered, and put the shopper two dismissals away from the page
+       * they started on. Closing on success only: a failed add leaves the
+       * window up with the selection intact so the button can just be tapped
+       * again.
+       */
+      setChoiceMode(null)
+
       if (mode === "buy") {
-        setChoiceMode(null)
         navigate("/checkout")
       } else {
         toast.success(`${product.name} added to your cart`)
