@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
-import { BadgeCheck, PackageX, ShoppingBag, Truck, Wallet } from "lucide-react"
+import { ArrowLeft, BadgeCheck, PackageX, Share2, ShoppingBag, Truck, Wallet } from "lucide-react"
 
 import { addToCartAsync } from "../lib/store/cartSlice"
 import { clearCurrentProduct, fetchProductById } from "../lib/store/productSlice"
 import { categoryLabel, categoryPath, SHIPPING } from "../lib/navigation"
+import { isProductAvailable } from "../lib/catalog"
 import { formatPrice } from "../lib/utils"
 import { cn } from "../lib/cn"
 import { useStorefrontUI } from "../lib/storefrontUI"
@@ -17,8 +18,10 @@ import {
   Badge,
   Breadcrumbs,
   Button,
+  CountBadge,
   EmptyState,
   ErrorState,
+  IconButton,
   Modal,
   Price,
   QuantityStepper,
@@ -51,6 +54,10 @@ import {
 /**
  * Mirrors the stock resolution in backend/controllers/cartController.addToCart
  * so the quantity cap on screen matches the one the API will enforce.
+ *
+ * Note what it does *not* answer: with nothing selected it falls through to
+ * `product.stock`, which for a product whose stock lives on its sizes or
+ * colours is 0. Availability is `isProductAvailable`; this is the cap.
  */
 function resolveStock(product, size, color) {
   if (!product) return 0
@@ -68,6 +75,7 @@ const ProductDetailPage = () => {
   const { openCart } = useStorefrontUI()
 
   const { currentProduct: product, loading, error } = useSelector((state) => state.products)
+  const cartCount = useSelector((state) => state.cart.totalItems)
 
   const [quantity, setQuantity] = useState(1)
   const [selectedSize, setSelectedSize] = useState(null)
@@ -111,7 +119,22 @@ const ProductDetailPage = () => {
    * consulted, so this says nothing about availability. `inStock` is separate.
    */
   const missingChoice = (requiresSize && !selectedSize) || (requiresColor && !selectedColor)
-  const inStock = maxStock > 0
+
+  /*
+   * Availability — not the same question as `maxStock > 0`.
+   *
+   * It used to be exactly that, and it was wrong for most of the catalogue:
+   * before a variant is picked `resolveStock` returns `product.stock`, which is
+   * 0 whenever stock lives on the sizes or colours. Both buttons therefore
+   * arrived disabled and labelled "Out of stock", and only came alive once a
+   * size or colour was chosen — the very ordering the variant window exists to
+   * remove. You can't ask someone to pick a size for a product the page is
+   * simultaneously telling them it doesn't have.
+   *
+   * So: before a choice is made, ask the product; after one is made, ask the
+   * chosen variant, which is what the API will check on add.
+   */
+  const inStock = missingChoice ? isProductAvailable(product) : maxStock > 0
 
   /*
    * Both triggers funnel through here so the gate lives in exactly one place.
@@ -171,6 +194,47 @@ const ProductDetailPage = () => {
       toast.error(typeof failure === "string" ? failure : "Couldn't add this to your cart")
     } finally {
       setPending(null)
+    }
+  }
+
+  /* ── Floating header actions (phones) ──────────────────── */
+
+  /*
+   * `navigate(-1)` alone is a trap on a shared link: the shopper arrived from
+   * WhatsApp, there's no entry before this one, and back either does nothing or
+   * leaves the site. React Router stamps its own index on the history entry, so
+   * we can tell the two apart and fall back to the category the product is in.
+   */
+  const goBack = () => {
+    if (window.history.state?.idx > 0) navigate(-1)
+    else navigate(product ? categoryPath(product.category) : "/products")
+  }
+
+  /* Native share sheet where there is one, clipboard everywhere else. */
+  const handleShare = async () => {
+    if (!product) return
+
+    const url = window.location.href
+    const copy = async () => {
+      await navigator.clipboard.writeText(url)
+      toast.success("Link copied")
+    }
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: product.name, text: product.name, url })
+        return
+      }
+      await copy()
+    } catch (failure) {
+      // Dismissing the OS sheet rejects with AbortError. That's a decision, not
+      // a failure — telling them it went wrong would be a lie.
+      if (failure?.name === "AbortError") return
+      try {
+        await copy()
+      } catch {
+        toast.error("Couldn't share this product")
+      }
     }
   }
 
@@ -278,10 +342,43 @@ const ProductDetailPage = () => {
     },
   ]
 
+  const galleryOverlay = (
+    <>
+      <IconButton label="Go back" variant="surface" onClick={goBack} className="shadow-card">
+        <ArrowLeft />
+      </IconButton>
+
+      <div className="flex items-center gap-2">
+        <IconButton label="Share this product" variant="surface" onClick={handleShare} className="shadow-card">
+          <Share2 />
+        </IconButton>
+
+        {/* The header carried the cart on every other route; this route hides
+            it, so the cart comes along with the floating controls rather than
+            leaving the phone with no way back to it. */}
+        <IconButton
+          label={cartCount > 0 ? `Open cart, ${cartCount} items` : "Open cart"}
+          variant="surface"
+          onClick={openCart}
+          className="shadow-card"
+        >
+          <ShoppingBag />
+          <CountBadge count={cartCount} className="-right-1 -top-1" label={null} />
+        </IconButton>
+      </div>
+    </>
+  )
+
   return (
     <div className="bg-gray-50">
-      {/* ── Breadcrumbs ──────────────────────────────────────── */}
-      <div className="border-b border-gray-100 bg-white">
+      {/*
+        ── Breadcrumbs ───────────────────────────────────────
+        md and up only. Below that the site header is hidden on this route and
+        the gallery owns the top of the screen, so a breadcrumb bar would be
+        the one strip of chrome left above a full-bleed photo — back and share
+        float on the image instead.
+      */}
+      <div className="hidden border-b border-gray-100 bg-white md:block">
         <div className="page-container py-3">
           <Breadcrumbs
             items={[
@@ -293,12 +390,16 @@ const ProductDetailPage = () => {
         </div>
       </div>
 
-      <div className="page-container py-6 md:py-10">
-        <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-10 xl:gap-14">
+      <div className="page-container pb-6 pt-0 md:py-10">
+        <div className="grid gap-6 md:gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-10 xl:gap-14">
           {/* ── Gallery ──────────────────────────────────────── */}
-          <div className="lg:sticky lg:top-24 lg:self-start">
+          {/* Cancels the container's gutter below md so the stage reaches both
+              screen edges. The values have to track .page-container's own
+              px-4 / sm:px-6 — md and up it's carded again and the outdent goes. */}
+          <div className="-mx-4 sm:-mx-6 md:mx-0 lg:sticky lg:top-24 lg:self-start">
             <ProductGallery
               product={product}
+              overlay={galleryOverlay}
               badges={
                 <>
                   {discount && <Badge tone="danger-solid">{discount.percent}% off</Badge>}
@@ -662,11 +763,14 @@ const ShippingInfo = () => (
 
 const ProductDetailSkeleton = () => (
   <div className="bg-gray-50">
-    <div className="page-container py-6 md:py-10">
-      <div className="grid gap-7 lg:grid-cols-2 lg:gap-14">
-        <div className="space-y-3">
-          <Skeleton className="aspect-square w-full rounded-card" />
-          <div className="flex gap-2">
+    <div className="page-container pb-6 pt-0 md:py-10">
+      <div className="grid gap-6 md:gap-7 lg:grid-cols-2 lg:gap-14">
+        {/* Tracks the real gallery: edge-to-edge and square-cornered below md,
+            carded from there up. A rounded placeholder over a full-bleed photo
+            would square itself off the moment the image landed. */}
+        <div className="-mx-4 space-y-3 sm:-mx-6 md:mx-0">
+          <Skeleton className="aspect-square w-full" rounded="rounded-none md:rounded-card" />
+          <div className="flex gap-2 px-4 sm:px-6 md:px-0">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-16 w-16 rounded-lg" />
             ))}

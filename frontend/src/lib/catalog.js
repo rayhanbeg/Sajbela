@@ -16,6 +16,29 @@ import { formatPrice } from "./utils"
 
 export const PAGE_SIZE = 12
 
+/**
+ * Can this product be bought at all?
+ *
+ * For most of the catalogue stock lives on the variants — `product.stock` is
+ * only meaningful when a product has neither sizes nor colours. Anything that
+ * reads `product.stock` alone reports nearly every variant product as sold
+ * out, so the card and the detail page both ask this instead.
+ *
+ * Deliberately independent of the current selection: it answers "is any of
+ * this in stock", not "is this exact size/colour in stock".
+ */
+export function isProductAvailable(product) {
+  if (!product) return false
+
+  if (product.category === "bangles" && product.sizes?.length) {
+    return product.sizes.some((size) => size.available && size.stock > 0)
+  }
+  if (product.colors?.length) {
+    return product.colors.some((color) => color.available && color.stock > 0)
+  }
+  return Boolean(product.inStock) && Number(product.stock) > 0
+}
+
 /** Colour names are matched case-insensitively against colors.name / color. */
 export const COLORS = [
   { value: "gold", label: "Gold", swatch: "#d4af37" },
@@ -75,10 +98,10 @@ export function readSort(searchParams) {
   return SORT_OPTIONS.some((option) => option.value === sort) ? sort : DEFAULT_SORT
 }
 
-export function readPage(searchParams) {
-  const page = Number.parseInt(searchParams.get("page"), 10)
-  return Number.isFinite(page) && page > 0 ? page : 1
-}
+/* There is no readPage(). The shop page grows its list with a "Load more"
+   button and keeps the page number out of the URL, because a shared or
+   reloaded ?page=3 link could only ever show products 25–36 with nothing
+   above them — not the view that was shared. */
 
 /**
  * Build the params object sent to GET /api/products.

@@ -43,10 +43,15 @@ const CategorySection = () => {
           Mobile is a snap rail rather than a grid: seven items in a 3- or
           4-column grid always leaves an orphan row, and tiles small enough to
           avoid that stop being comfortable 44px touch targets.
+
+          `scroll-pl-4` matches the `px-4` — mandatory snapping measures against
+          the scrollport's padding edge, so without it the browser scrolls the
+          padding away on first paint and the first tile sits flush against the
+          side of the screen. Same fix as ProductShowcase's rail.
         */}
         <ul
           className={cn(
-            "-mx-4 flex snap-x-mandatory gap-2.5 overflow-x-auto px-4 pb-1 scrollbar-hide",
+            "-mx-4 flex snap-x-mandatory gap-2.5 overflow-x-auto scroll-pl-4 px-4 pb-1 scrollbar-hide",
             "sm:mx-0 sm:grid sm:grid-cols-4 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0",
             "lg:grid-cols-7",
           )}

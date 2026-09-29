@@ -37,7 +37,10 @@ export { useStorefrontUI }
  * yank it out from under the content. `/products` — the shop grid — keeps its
  * nav; only `/products/:id` is matched.
  */
-const OWN_BOTTOM_BAR = [/^\/products\/[^/]+\/?$/, /^\/checkout\/?$/]
+const PRODUCT_DETAIL_ROUTE = /^\/products\/[^/]+\/?$/
+const CHECKOUT_ROUTE = /^\/checkout\/?$/
+
+const OWN_BOTTOM_BAR = [PRODUCT_DETAIL_ROUTE, CHECKOUT_ROUTE]
 
 /*
  * The WhatsApp button also goes, on checkout only.
@@ -51,8 +54,21 @@ const OWN_BOTTOM_BAR = [/^\/products\/[^/]+\/?$/, /^\/checkout\/?$/]
  * The product page keeps it — its bar is `md:hidden`, so the two never share a
  * viewport, and "ask about this product" is worth the corner it sits in.
  */
-const CHECKOUT_ROUTE = /^\/checkout\/?$/
 
+/*
+ * The product page also hides the header, but only below md.
+ *
+ * On a phone that page is now a full-bleed photo starting at y=0 with its own
+ * floating back / share / cart controls — a pink bar above it would be a second
+ * navigation layer over a screen that already has one, and it would push the
+ * image the whole point of the layout is to lead with down by 64px.
+ *
+ * Only below md, and via a class rather than by not rendering it: from md up
+ * the page is a two-column desktop layout where stripping the site nav would be
+ * hostile, and `hidden md:block` on the <header> itself keeps `position: sticky`
+ * working — a wrapper div would become the sticky element's containing block and
+ * unstick it the moment the header scrolled past its own height.
+ */
 const StorefrontLayout = () => {
   const location = useLocation()
 
@@ -80,11 +96,16 @@ const StorefrontLayout = () => {
 
   const hideBottomNav = OWN_BOTTOM_BAR.some((route) => route.test(location.pathname))
   const hideWhatsApp = CHECKOUT_ROUTE.test(location.pathname)
+  const headerOnDesktopOnly = PRODUCT_DETAIL_ROUTE.test(location.pathname)
 
   return (
     <StorefrontUIContext.Provider value={api}>
       <div className="flex min-h-screen flex-col bg-white">
-        <Header onSearchClick={handleSearchClick} onCartClick={handleCartClick} />
+        <Header
+          className={headerOnDesktopOnly ? "hidden md:block" : undefined}
+          onSearchClick={handleSearchClick}
+          onCartClick={handleCartClick}
+        />
 
         {/*
           `pb-bottom-nav` clears the fixed mobile bottom nav (4rem + iOS safe

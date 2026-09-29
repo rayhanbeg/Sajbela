@@ -18,9 +18,15 @@ import { Image, IconButton } from "../ui"
  * Zoom is deliberately pointer-gated: on a touch screen there's no hover, and
  * the browser's own pinch-zoom inside the lightbox is better than anything we
  * could reimplement.
+ *
+ * Below md the stage is edge-to-edge: no radius, no border, no letterbox
+ * padding. The detail page cancels its own gutter around this block, so the
+ * photo runs to both screen edges the way a native product screen does, and
+ * `overlay` is where that screen's floating controls (back, share, cart) go —
+ * they replace the site header, which the layout drops on this route.
  */
 
-const ProductGallery = ({ product, badges, className }) => {
+const ProductGallery = ({ product, badges, overlay, className }) => {
   const images = Array.isArray(product?.images) && product.images.length > 0 ? product.images : [{ url: null }]
 
   const [index, setIndex] = useState(0)
@@ -83,7 +89,8 @@ const ProductGallery = ({ product, badges, className }) => {
         onMouseMove={trackPointer}
         onMouseLeave={() => setZoomOrigin(null)}
         className={cn(
-          "group relative overflow-hidden rounded-card border border-gray-100 bg-white",
+          "group relative overflow-hidden bg-white",
+          "md:rounded-card md:border md:border-gray-100",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2",
           canZoom && "cursor-zoom-in",
         )}
@@ -98,7 +105,12 @@ const ProductGallery = ({ product, badges, className }) => {
           sizes="(max-width: 1024px) 100vw, 45vw"
           priority
           className="bg-white"
-          imgClassName="p-2 sm:p-4"
+          /* The letterbox band around a `contain` shot. It used to be p-2
+             rising to p-4, which on a 375px screen spent 8% of the stage on
+             white space around a photo that already ships with its own
+             margin. Nothing below md, and a hairline from there up where the
+             card border gives the image an edge to keep away from. */
+          imgClassName="md:p-3"
           style={
             zoomOrigin
               ? { transform: "scale(2)", transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%` }
@@ -106,10 +118,32 @@ const ProductGallery = ({ product, badges, className }) => {
           }
         />
 
-        {/* Badges sit above the image but below the controls. */}
-        {badges && <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-1.5">{badges}</div>}
+        {/*
+          Floating controls, phone only — back / share / cart, supplied by the
+          page. They sit above the photo because there's no header up there to
+          hold them any more.
+        */}
+        {overlay && (
+          <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 px-3 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] md:hidden">
+            {overlay}
+          </div>
+        )}
 
-        <div className="absolute right-3 top-3">
+        {/* Badges sit above the image but below the controls — pushed clear of
+            the floating row on phones, back in the corner once it's gone. */}
+        {badges && (
+          <div
+            className={cn(
+              "pointer-events-none absolute left-3 flex flex-col gap-1.5",
+              overlay ? "top-[3.75rem] md:top-3" : "top-3",
+            )}
+          >
+            {badges}
+          </div>
+        )}
+
+        {/* Bottom-right on phones, where the share/cart cluster owns the top. */}
+        <div className="absolute bottom-3 right-3 md:bottom-auto md:top-3">
           <IconButton
             label="View full size"
             variant="surface"
@@ -160,7 +194,15 @@ const ProductGallery = ({ product, badges, className }) => {
       {hasMultiple && (
         <ul
           ref={thumbsRef}
-          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-hide sm:gap-2.5"
+          className={cn(
+            "flex gap-2 overflow-x-auto pb-1 scrollbar-hide sm:gap-2.5",
+            // The stage bleeds to the screen edge below md but the thumbs
+            // shouldn't, so they carry the page gutter themselves down there.
+            // From md the stage is carded again and the strip goes back to its
+            // 1px outdent, which stops the focus ring being clipped by the
+            // scroll container.
+            "px-4 sm:px-6 md:-mx-1 md:px-1",
+          )}
         >
           {images.map((image, i) => (
             <li key={image.public_id || image.url || i} className="shrink-0">

@@ -29,6 +29,19 @@ const GRID_CLASSES = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-col
  * edge while the first one still lines up with the page gutter. From md up it
  * drops out of the scroll container into a plain grid.
  *
+ * `scroll-pl-*` is not optional here, and its absence is what made these rows
+ * look broken on a phone. `scroll-snap-type: x mandatory` makes the browser
+ * snap the moment the row is laid out, and a snap position is measured against
+ * the scrollport's *padding* edge — so it scrolled the container by exactly the
+ * `px-4` it had just been given, parked the first card flush against the left
+ * of the screen, and ate the gutter. Scroll padding moves the snapport inwards
+ * so the first card snaps to the gutter instead of through it. The grid
+ * sections on the same page were never affected, because nothing snaps them.
+ *
+ * The sm step exists because .page-container widens to px-6 there while the
+ * outdent stayed at -mx-4, leaving the row half a gutter out of line with the
+ * heading above it.
+ *
  * These two strings are shared with the loading state below. They used to be
  * inlined in the content branch only, while the skeleton always rendered
  * GRID_CLASSES — so a rail section loaded as a two-column block of four
@@ -41,8 +54,8 @@ const GRID_CLASSES = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-col
  * ring is the reason it stays.
  */
 const RAIL_CLASSES = [
-  "-mx-4 flex snap-x-mandatory gap-3 overflow-x-auto scroll-smooth px-4 pb-2 scrollbar-hide",
-  "sm:gap-4",
+  "-mx-4 flex snap-x-mandatory gap-3 overflow-x-auto scroll-pl-4 scroll-smooth px-4 pb-2 scrollbar-hide",
+  "sm:-mx-6 sm:gap-4 sm:px-6 sm:scroll-pl-6",
   "md:mx-0 md:grid md:grid-cols-3 md:gap-5 md:overflow-visible md:px-0 md:pb-0",
   "lg:grid-cols-4",
 ].join(" ")

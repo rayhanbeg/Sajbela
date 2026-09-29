@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Link } from "react-router-dom"
 
 import { formatPrice } from "../../lib/utils"
+import { isProductAvailable } from "../../lib/catalog"
 import { cn } from "../../lib/cn"
 import { Image, getDiscount } from "../ui"
 
@@ -45,22 +46,11 @@ import { Image, getDiscount } from "../ui"
  *  the grid a consistent, slightly editorial proportion. */
 const FRAME = "aspect-[4/5] w-full"
 
-/** The card is unavailable if the product is, or if every variant is sold out. */
-function isAvailable(product) {
-  if (product.category === "bangles" && product.sizes?.length) {
-    return product.sizes.some((size) => size.available && size.stock > 0)
-  }
-  if (product.colors?.length) {
-    return product.colors.some((color) => color.available && color.stock > 0)
-  }
-  return Boolean(product.inStock) && Number(product.stock) > 0
-}
-
 const ProductCard = ({ product, priority = false, sizes, className }) => {
   const [hovered, setHovered] = useState(false)
 
   const href = `/products/${product._id}`
-  const available = isAvailable(product)
+  const available = isProductAvailable(product)
 
   const primaryImage = product.images?.[0]?.url || product.image
   const secondImage = product.images?.[1]?.url
@@ -84,7 +74,10 @@ const ProductCard = ({ product, priority = false, sizes, className }) => {
       <Link
         to={href}
         className={cn(
-          "flex h-full flex-col overflow-hidden rounded-card",
+          // Square corners, deliberately. A rounded photo reads as a "card"
+          // even without a border — the corners were the last piece of chrome
+          // left after the panel went, and the grid is calmer without them.
+          "flex h-full flex-col overflow-hidden",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500",
           // Against the page, not the card — the card has no background of its
           // own any more, so an inner ring would have nothing to sit inside.

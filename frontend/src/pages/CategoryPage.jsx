@@ -1,10 +1,8 @@
 import { useParams } from "react-router-dom"
-import { Circle, Gem, Gift, Heart, Palette, Shirt, Sparkles } from "lucide-react"
 
 import ProductCatalog from "../components/products/ProductCatalog"
 import { Breadcrumbs, Button } from "../components/ui"
 import { CATEGORIES, categoryPath, getCategory } from "../lib/navigation"
-import { cn } from "../lib/cn"
 import NotFoundPage from "./NotFoundPage"
 
 /**
@@ -14,17 +12,20 @@ import NotFoundPage from "./NotFoundPage"
  * every category link threw away its own URL. Now it renders the shared
  * catalogue with the category locked, so the route stays canonical and the
  * filter panel shows the filters that are still yours to change.
+ *
+ * ── No icon ──────────────────────────────────────────────────────────────
+ *
+ * The banner used to lead with a 64px gradient tile holding a lucide glyph —
+ * a circle for bangles, a shirt for alna, a palette for cosmetics. It was
+ * decoration standing in for the thing itself: the grid two inches below is
+ * full of photographs of the actual products, and no abstract mark competes
+ * with those. It also promised a taxonomy the icon set couldn't keep — a
+ * circle and a heart tell you nothing about bangles versus necklaces, and
+ * every new category needed a glyph picked for it or fell back to the circle.
+ *
+ * What's left is what the shopper came for: where they are, what this is, and
+ * the row of sibling categories.
  */
-
-const ICONS = {
-  bangles: Circle,
-  earrings: Sparkles,
-  cosmetics: Palette,
-  necklaces: Heart,
-  rings: Gem,
-  alna: Shirt,
-  combo: Gift,
-}
 
 const CategoryPage = () => {
   const { slug } = useParams()
@@ -33,8 +34,6 @@ const CategoryPage = () => {
   // An unknown slug is a 404, not an empty product grid.
   if (!category) return <NotFoundPage />
 
-  const Icon = ICONS[category.slug] || Circle
-
   return (
     <div className="bg-gray-50">
       {/* ── Category banner ──────────────────────────────────── */}
@@ -42,26 +41,11 @@ const CategoryPage = () => {
         <div className="page-container py-6 md:py-9">
           <Breadcrumbs items={[{ label: "Shop", to: "/products" }, { label: category.label }]} className="mb-4" />
 
-          <div className="flex items-center gap-4">
-            <span
-              aria-hidden="true"
-              className={cn(
-                "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-sm",
-                "md:h-16 md:w-16",
-                category.accent,
-              )}
-            >
-              <Icon className="h-6 w-6 md:h-7 md:w-7" />
-            </span>
-
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-pink-600">{category.tagline}</p>
-              <h1 className="mt-1 text-display-sm font-bold text-gray-900">{category.label}</h1>
-            </div>
-          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-pink-600">{category.tagline}</p>
+          <h1 className="mt-1 text-display-sm font-bold text-gray-900">{category.label}</h1>
 
           {/* Horizontal category switcher — faster than going back to the grid. */}
-          <ul className="mt-6 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide md:mx-0 md:flex-wrap md:px-0">
+          <ul className="mt-6 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide sm:-mx-6 sm:px-6 md:mx-0 md:flex-wrap md:px-0">
             {CATEGORIES.map((item) => {
               const isCurrent = item.slug === category.slug
 

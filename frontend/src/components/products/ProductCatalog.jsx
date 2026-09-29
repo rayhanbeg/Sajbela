@@ -12,12 +12,11 @@ import {
   applyFilterPatch,
   describeActiveFilters,
   readFilters,
-  readPage,
   readSort,
   toQueryParams,
 } from "../../lib/catalog"
 import { cn } from "../../lib/cn"
-import { Button, Drawer, EmptyState, ErrorState, IconButton, Pagination, SkeletonProductCard } from "../ui"
+import { Button, Drawer, EmptyState, ErrorState, IconButton, SkeletonProductCard, useToast } from "../ui"
 import ProductCard from "./ProductCard"
 import ProductFilters from "./ProductFilters"
 
@@ -43,6 +42,19 @@ import ProductFilters from "./ProductFilters"
  * narrowing the results. The category cross-links that used to sit in the
  * sidebar are still crawlable from the header and footer, which list every
  * category on every page.
+ *
+ * ── Paging ───────────────────────────────────────────────────────────────
+ *
+ * One "Load more" button, not a numbered strip. Page numbers make sense for a
+ * table you scan and return to; for a photo grid you browse, they interrupt it
+ * — every click threw the shopper back to the top of a fresh page and lost the
+ * row they were looking at, and on a 375px screen the numbers had already
+ * collapsed to a "Page 3 of 9" label that told them nothing they could act on.
+ *
+ * The page number is no longer in the URL either. It could only lie: reloading
+ * a ?page=3 link would show products 25–36 with nothing above them, which is
+ * not the view that was shared. Filters and sort stay in the URL, where they
+ * describe a result set that reproduces exactly.
  */
 
 const GRID_CLASSES = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5"
@@ -53,8 +65,9 @@ const CARD_SIZES = "(max-width: 640px) 47vw, (max-width: 768px) 31vw, 24vw"
 
 const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
   const dispatch = useDispatch()
+  const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { products, pagination, loading, error } = useSelector((state) => state.products)
+  const { products, pagination, loading, loadingMore, error } = useSelector((state) => state.products)
 
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
@@ -63,7 +76,6 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
 
   const urlFilters = readFilters(searchParams)
   const sort = readSort(searchParams)
-  const page = readPage(searchParams)
 
   // Locked values win — a stray ?category=rings on /category/bangles shouldn't
   // show rings under a "Bangles" heading.
@@ -73,8 +85,12 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
    * The effect keys off a *string*, not the params object. A freshly built
    * object has a new identity on every render, so depending on it directly
    * would re-fetch in a loop.
+   *
+   * Always page 1: this is the "the query changed, start over" fetch. Growing
+   * the list is `loadMore`'s job and it dispatches directly, so a re-render
+   * can't replay it.
    */
-  const queryKey = JSON.stringify(toQueryParams({ filters, sort, page }))
+  const queryKey = JSON.stringify(toQueryParams({ filters, sort, page: 1 }))
 
   useEffect(() => {
     dispatch(fetchProducts(JSON.parse(queryKey)))
@@ -92,20 +108,36 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
     setSearchParams(next, { replace: true })
   }
 
-  const goToPage = (nextPage) => {
-    setSearchParams(applyFilterPatch(searchParams, { page: nextPage }), { replace: false })
-    window.scrollTo({ top: 0, behavior: "smooth" })
+  /*
+   * The next page number comes from the server's own `currentPage` rather than
+   * a counter here, so the two can't drift — and because the button is disabled
+   * while the request is in flight, a double tap can't skip a page.
+   */
+  const loadMore = async () => {
+    const nextPage = (pagination?.currentPage || 1) + 1
+
+    try {
+      await dispatch(fetchProducts({ ...JSON.parse(queryKey), page: nextPage, append: true })).unwrap()
+    } catch {
+      toast.error("Couldn't load more products")
+    }
   }
 
   // Counted, not listed. The number rides on the icon's accessible name so the
   // dot isn't the only way to know a filter is on.
   const activeCount = describeActiveFilters(filters, lockedKeys).length
-  const totalPages = pagination?.totalPages ?? 1
+  const hasMore = pagination?.hasNext ?? (pagination?.currentPage || 1) < (pagination?.totalPages ?? 1)
 
   return (
     <div className={cn("page-container py-5 md:py-8", className)}>
-      {/* ── Controls ──────────────────────────────────────────── */}
-      <div className="flex items-center justify-end gap-2 pb-4">
+      {/*
+        ── Controls ────────────────────────────────────────────
+        One at each end rather than a pair in the corner. They do opposite
+        things — one reorders what's there, the other changes what's there —
+        and sitting them shoulder to shoulder read as a single two-part
+        control, which is also how you end up tapping the wrong one.
+      */}
+      <div className="flex items-center justify-between gap-2 pb-4">
         <IconButton label="Sort products" variant="outline" onClick={() => setSortOpen(true)}>
           <ArrowUpDown />
         </IconButton>
@@ -154,19 +186,33 @@ const ProductCatalog = ({ lockedFilters = {}, emptyAction, className }) => {
                 <ProductCard
                   product={product}
                   // First row is above the fold on most viewports.
-                  priority={page === 1 && index < 4}
+                  priority={index < 4}
                   sizes={CARD_SIZES}
                 />
               </li>
             ))}
           </ul>
 
-          <Pagination
-            currentPage={pagination?.currentPage || page}
-            totalPages={totalPages}
-            onPageChange={goToPage}
-            className="mt-10"
-          />
+          {/*
+            One button, centred, and nothing else. No "showing 24 of 57" line
+            above it — the grid is the count, and the button already says
+            there's more. It stays mounted while it loads, so focus doesn't
+            move and the keyboard can click it again the moment it's live.
+          */}
+          {hasMore && (
+            <div className="mt-8 flex justify-center md:mt-10">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={loadMore}
+                loading={loadingMore}
+                loadingText="Loading…"
+                className="min-w-[11rem]"
+              >
+                Load more
+              </Button>
+            </div>
+          )}
         </>
       )}
 

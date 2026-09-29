@@ -37,7 +37,10 @@ export const SkeletonText = ({ lines = 3, className }) => (
  *  un-box it the moment data landed. */
 export const SkeletonProductCard = ({ className }) => (
   <div className={cn(className)}>
-    <Skeleton className="aspect-[4/5] w-full rounded-card" />
+    {/* `rounded` prop, not className — ProductCard's frame has square corners
+        and cn() can't resolve a radius conflict, so the default has to be
+        replaced rather than overridden. */}
+    <Skeleton className="aspect-[4/5] w-full" rounded="rounded-none" />
     <div className="space-y-2 pt-2.5">
       <Skeleton className="h-4 w-full" rounded="rounded" />
       <Skeleton className="h-4 w-2/3" rounded="rounded" />

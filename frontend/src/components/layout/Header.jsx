@@ -17,8 +17,12 @@ import { Badge, CountBadge, IconButton } from "../ui"
  * a proper three-zone desktop layout, an accessible category mega-menu, a
  * real search affordance, and a stripped-back mobile bar that hands primary
  * navigation to <BottomNav/>.
+ *
+ * `className` lands on the <header> element rather than a wrapper so that
+ * `position: sticky` survives — see StorefrontLayout, which uses it to drop
+ * the bar below md on the product detail route.
  */
-const Header = ({ onSearchClick, onCartClick }) => {
+const Header = ({ className, onSearchClick, onCartClick }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
@@ -116,7 +120,7 @@ const Header = ({ onSearchClick, onCartClick }) => {
         </div>
       </div>
 
-      <header className="sticky top-0 z-header bg-pink-600 shadow-md">
+      <header className={cn("sticky top-0 z-header bg-pink-600 shadow-md", className)}>
         <div className="page-container">
           <div className="flex h-16 items-center gap-3 lg:h-[4.5rem] lg:gap-6">
             {/* Wordmark */}

@@ -2,9 +2,19 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit"
 import { productsAPI } from "../api"
 
 // Async thunks
-export const fetchProducts = createAsyncThunk("products/fetchProducts", async (params, { rejectWithValue }) => {
+
+/**
+ * GET /api/products.
+ *
+ * `append: true` is a client-side flag for the shop page's "Load more": the
+ * results are added to what's already in the store instead of replacing it, and
+ * the grid stays on screen while the next page is in flight. It is stripped
+ * before the request — the API has never seen it and must not start now.
+ */
+export const fetchProducts = createAsyncThunk("products/fetchProducts", async (params = {}, { rejectWithValue }) => {
   try {
-    const response = await productsAPI.getAll(params)
+    const { append, ...query } = params
+    const response = await productsAPI.getAll(query)
     return response.data
   } catch (error) {
     return rejectWithValue(error.response?.data?.message || "Failed to fetch products")
@@ -64,6 +74,7 @@ const initialState = {
   currentProduct: null,
   featuredProducts: [],
   loading: false,
+  loadingMore: false,
   error: null,
   pagination: {
     currentPage: 1,
@@ -98,18 +109,37 @@ const productSlice = createSlice({
   extraReducers: (builder) => {
     builder
       // Fetch Products
-      .addCase(fetchProducts.pending, (state) => {
-        state.loading = true
+      .addCase(fetchProducts.pending, (state, action) => {
+        // `loading` swaps the grid for skeletons; a "Load more" must not do
+        // that, or every click would blank the products already on screen.
+        if (action.meta.arg?.append) state.loadingMore = true
+        else state.loading = true
         state.error = null
       })
       .addCase(fetchProducts.fulfilled, (state, action) => {
         state.loading = false
-        state.products = action.payload.products
+        state.loadingMore = false
+
+        const incoming = action.payload.products || []
+
+        if (action.meta.arg?.append) {
+          // Guard against a double-fire landing the same page twice — the ids
+          // would collide as React keys and the count would read wrong.
+          const seen = new Set(state.products.map((product) => product._id))
+          state.products.push(...incoming.filter((product) => !seen.has(product._id)))
+        } else {
+          state.products = incoming
+        }
+
         state.pagination = action.payload.pagination
       })
       .addCase(fetchProducts.rejected, (state, action) => {
         state.loading = false
-        state.error = action.payload
+        state.loadingMore = false
+        // A failed "Load more" must not replace the products already on screen
+        // with a full-page error state. The caller unwraps the rejection and
+        // reports it as a toast, leaving the grid intact and the button live.
+        if (!action.meta.arg?.append) state.error = action.payload
       })
       // Fetch Product by ID
       .addCase(fetchProductById.pending, (state) => {
