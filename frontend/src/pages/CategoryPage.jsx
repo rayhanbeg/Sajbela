@@ -35,7 +35,7 @@ const CategoryPage = () => {
   if (!category) return <NotFoundPage />
 
   return (
-    <div className="bg-gray-50">
+    <div className="bg-white">
       {/* ── Category banner ──────────────────────────────────── */}
       <div className="border-b border-gray-100 bg-gradient-to-b from-pink-50 to-white">
         <div className="page-container py-6 md:py-9">
@@ -67,17 +67,16 @@ const CategoryPage = () => {
       </div>
 
       {/*
-        bg-gray-50 to match /products. The page body is white, so without this
-        the toolbar's white outline buttons and the white product cards had no
-        edge against it — the sidebar used to carry a border that hid the
-        problem, and it's gone now.
+        No wrapper of its own any more. This used to be a bg-gray-50 band to
+        match /products, which was itself grey so the white product cards had an
+        edge against it — but the cards have no panel left to outline, so both
+        pages are white now and the banner's own border-b is the only divider
+        the catalogue needs.
       */}
-      <div className="bg-gray-50">
-        <ProductCatalog
-          lockedFilters={{ category: category.slug }}
-          emptyAction={<Button to="/products">Browse all products</Button>}
-        />
-      </div>
+      <ProductCatalog
+        lockedFilters={{ category: category.slug }}
+        emptyAction={<Button to="/products">Browse all products</Button>}
+      />
     </div>
   )
 }

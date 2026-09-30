@@ -122,12 +122,22 @@ const Header = ({ className, onSearchClick, onCartClick }) => {
 
       <header className={cn("sticky top-0 z-header bg-pink-600 shadow-md", className)}>
         <div className="page-container">
-          <div className="flex h-16 items-center gap-3 lg:h-[4.5rem] lg:gap-6">
-            {/* Wordmark */}
+          {/*
+            56px on phones. It was a flat 4rem everywhere below lg, which is
+            taller than the platform app-bar standard and — with a 27px serif
+            wordmark inside it — took a sixth of a short phone viewport before any
+            content appeared. The 40px action buttons still clear it with 8px to
+            spare, so nothing got tighter to hit. Back to 4rem from sm, where the
+            width is there to carry it, and 4.5rem at lg where the announcement
+            bar and the inline search field sit alongside.
+          */}
+          <div className="flex h-14 items-center gap-2.5 sm:h-16 sm:gap-3 lg:h-[4.5rem] lg:gap-6">
+            {/* Wordmark — steps down with the bar so the ratio between them holds
+                rather than the type filling a shorter bar. */}
             <Link
               to="/"
               aria-label="Sajbela home"
-              className="shrink-0 rounded-md font-serif text-[1.7rem] font-bold leading-none tracking-tight text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-pink-600 lg:text-[2.1rem]"
+              className="shrink-0 rounded-md font-serif text-[1.5rem] font-bold leading-none tracking-tight text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-pink-600 sm:text-[1.7rem] lg:text-[2.1rem]"
             >
               Sajbela
             </Link>

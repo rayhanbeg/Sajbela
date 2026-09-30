@@ -35,7 +35,12 @@ const ICONS = {
 
 const CategorySection = () => {
   return (
-    <section className="bg-gray-50 py-8 md:py-12">
+    // White, like every other home section. The band used to be bg-gray-50 to
+    // separate itself from its neighbours, but alternating grey and white
+    // stripes down a page is separation by decoration. The tiles carry their own
+    // hairline border, so they still read as tiles on white, and the section
+    // rhythm — py-8/py-12 plus the SectionHeader — does the dividing.
+    <section className="bg-white py-8 md:py-12">
       <div className="page-container">
         <SectionHeader title="Categories" align="left" actionLabel="View all" actionTo="/products" />
 

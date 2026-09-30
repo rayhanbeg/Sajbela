@@ -320,20 +320,21 @@ const ProductDetailPage = () => {
     {
       id: "description",
       label: "Description",
+      /*
+       * Description only. `product.tags` used to be rendered as a row of pills
+       * under it, but tags are merchandising metadata — they exist so the admin
+       * can group and search the catalogue, and they're edited in the admin
+       * product form. On the storefront they were an unexplained row of grey
+       * words that looked like filters and weren't clickable. They stay in the
+       * model and in the admin; they just don't ship to the shopper.
+       *
+       * `break-words` because descriptions are pasted in, and a 40-character
+       * unbroken product code would otherwise widen the panel past its column.
+       */
       content: (
-        <div className="max-w-3xl">
-          <p className="whitespace-pre-line leading-relaxed text-gray-700">{product.description}</p>
-
-          {product.tags?.length > 0 && (
-            <ul className="mt-5 flex flex-wrap gap-1.5">
-              {product.tags.map((tag) => (
-                <li key={tag}>
-                  <Badge tone="neutral">{tag}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <p className="max-w-3xl whitespace-pre-line break-words leading-relaxed text-gray-700">
+          {product.description}
+        </p>
       ),
     },
     {
@@ -382,7 +383,7 @@ const ProductDetailPage = () => {
   )
 
   return (
-    <div className="bg-gray-50">
+    <div className="bg-white">
       {/*
         ── Breadcrumbs ───────────────────────────────────────
         md and up only. Below that the site header is hidden on this route and
@@ -403,12 +404,34 @@ const ProductDetailPage = () => {
       </div>
 
       <div className="page-container pb-6 pt-0 md:py-10">
-        <div className="grid gap-6 md:gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-10 xl:gap-14">
+        {/*
+          `grid-cols-1` is load-bearing, not decoration. Without it the single
+          column below lg is an *implicit* track, and an implicit track's base
+          size is the item's content-based minimum — which an in-flow <img>
+          contributes its intrinsic width to. One wide source shot therefore
+          pushed this column past the viewport and put a horizontal scrollbar on
+          the whole page. Tailwind's `grid-cols-1` emits `minmax(0, 1fr)`, which
+          floors that minimum at zero, exactly like the explicit lg columns do.
+        */}
+        <div className="grid grid-cols-1 gap-6 md:gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-10 xl:gap-14">
           {/* ── Gallery ──────────────────────────────────────── */}
-          {/* Cancels the container's gutter below md so the stage reaches both
-              screen edges. The values have to track .page-container's own
-              px-4 / sm:px-6 — md and up it's carded again and the outdent goes. */}
-          <div className="-mx-4 sm:-mx-6 md:mx-0 lg:sticky lg:top-24 lg:self-start">
+          {/*
+            Cancels the container's gutter below md so the stage reaches both
+            screen edges. The values have to track .page-container's own
+            px-4 / sm:px-6 — md and up it's carded again and the outdent goes.
+
+            `min-w-0` is the item half of the blowout fix above: the track floors
+            the *track's* minimum, this floors the *item's*.
+
+            The lg max-width keeps the sticky column inside the viewport. The
+            stage is square, so its height is its width; 13rem is the space the
+            rest of the column needs — 6rem for `top-24`, ~5.75rem of thumbnail
+            strip and gap, and a little slack. Without it a wide viewport makes a
+            square taller than the screen and sticky has nothing to show.
+            No `mx-auto`: a stretched item with a definite max-width sits at the
+            start of its track, which is where it should line up.
+          */}
+          <div className="-mx-4 min-w-0 sm:-mx-6 md:mx-0 lg:sticky lg:top-24 lg:max-w-[calc(100dvh-13rem)] lg:self-start">
             <ProductGallery
               product={product}
               overlay={galleryOverlay}
@@ -429,7 +452,9 @@ const ProductDetailPage = () => {
               above this column already reads Shop → Earrings → <name>, so an
               uppercase "EARRINGS" line was the same word twice in 40px.
             */}
-            <h1 className="text-display-sm font-bold leading-tight text-gray-900">{product.name}</h1>
+            {/* `break-words` so a long unspaced product name (a code, a URL, a
+                run-on Bangla compound) wraps instead of widening the column. */}
+            <h1 className="break-words text-display-sm font-bold leading-tight text-gray-900">{product.name}</h1>
 
             {(product.numReviews > 0 || product.rating > 0) && (
               <Rating
@@ -552,7 +577,7 @@ const ProductDetailPage = () => {
         exclude={product._id}
         layout="rail"
         limit={8}
-        className="bg-gray-50"
+        className="border-t border-gray-100 bg-white"
       />
 
       {/*
@@ -638,7 +663,7 @@ const ProductDetailPage = () => {
       >
         <div className="space-y-5">
           <div className="flex items-start justify-between gap-4">
-            <p className="min-w-0 text-sm font-medium leading-snug text-gray-900">{product.name}</p>
+            <p className="min-w-0 break-words text-sm font-medium leading-snug text-gray-900">{product.name}</p>
             <div className="shrink-0">
               <Price price={product.price} originalPrice={product.originalPrice} size="md" showBadge={false} />
             </div>
@@ -743,8 +768,10 @@ const Specifications = ({ product }) => {
     <dl className="max-w-2xl divide-y divide-gray-100 border-y border-gray-100">
       {rows.map(([key, value]) => (
         <div key={key} className="flex justify-between gap-6 py-3">
-          <dt className="text-sm text-gray-600">{key}</dt>
-          <dd className="text-right text-sm font-medium text-gray-900">{value}</dd>
+          <dt className="shrink-0 text-sm text-gray-600">{key}</dt>
+          {/* Admin-entered free text — a long dimension string has to wrap
+              inside the row rather than stretch it. */}
+          <dd className="min-w-0 break-words text-right text-sm font-medium text-gray-900">{value}</dd>
         </div>
       ))}
     </dl>
@@ -774,13 +801,13 @@ const ShippingInfo = () => (
 )
 
 const ProductDetailSkeleton = () => (
-  <div className="bg-gray-50">
+  <div className="bg-white">
     <div className="page-container pb-6 pt-0 md:py-10">
-      <div className="grid gap-6 md:gap-7 lg:grid-cols-2 lg:gap-14">
+      <div className="grid grid-cols-1 gap-6 md:gap-7 lg:grid-cols-2 lg:gap-14">
         {/* Tracks the real gallery: edge-to-edge and square-cornered below md,
             carded from there up. A rounded placeholder over a full-bleed photo
             would square itself off the moment the image landed. */}
-        <div className="-mx-4 space-y-3 sm:-mx-6 md:mx-0">
+        <div className="-mx-4 min-w-0 space-y-3 sm:-mx-6 md:mx-0">
           <Skeleton className="aspect-square w-full" rounded="rounded-none md:rounded-card" />
           <div className="flex gap-2 px-4 sm:px-6 md:px-0">
             {Array.from({ length: 4 }).map((_, i) => (

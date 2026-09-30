@@ -26,6 +26,12 @@ import { STORE } from "../../lib/navigation"
  * hairline and a radius, no shadow. The lift was doing the same job as the
  * whitespace already surrounding it.
  *
+ * The backdrop is white at every width. It used to go bg-gray-50 from sm so the
+ * white card had something to sit on, but a hairline border is already an edge —
+ * the grey was a second one, and it made a sign-in form look like a dialog
+ * floating over an empty page. White throughout also means the card appearing at
+ * sm is a change of one property, not two.
+ *
  * The height budget is the shell's, not the viewport's: 4rem of sticky header
  * always, plus 4rem of mobile bottom nav below md. Centring on a plain 100vh
  * pushed the card down by half the nav and left the footer link under it.
@@ -41,7 +47,7 @@ const AuthLayout = ({ title, description, notice, width = "md", children, footer
     className={cn(
       "flex flex-col justify-center bg-white px-5 py-8",
       "min-h-[calc(100dvh-8rem)] md:min-h-[calc(100dvh-4rem)]",
-      "sm:bg-gray-50 sm:px-6 sm:py-12",
+      "sm:px-6 sm:py-12",
     )}
   >
     <div className={cn("mx-auto w-full", WIDTHS[width] || WIDTHS.md)}>
